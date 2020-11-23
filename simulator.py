@@ -22,7 +22,7 @@ def integration_verlet(k, r_0, delta_t, m, file_name):
 
     # Converts our units to the force unit amu A (0.1ps)^-2
     # We now have Kj/(mol * A) = 1000 kg m mol^-1 A^-1 s^-2
-    cf = 1.6605*6.022e-1 # Is really close to 1
+    #cf = 1.6605*6.022e-1 # Is really close to 1
 
     # Read the xyz file and retrieve initial positions
     pos, atoms, nr_atoms = io_sim.read_xyz(file_name)
@@ -43,7 +43,7 @@ def integration_verlet(k, r_0, delta_t, m, file_name):
         # We set one step using euler
         t += delta_t
         pos_old = pos
-        (pos, v) = update_euler(pos, v, k, r_0, delta_t, cf)
+        (pos, v) = update_euler(pos, v, k, r_0, delta_t)
 
         while t < T:
             t += delta_t
@@ -79,7 +79,7 @@ def integration(k, r_0, delta_t, m, file_name, update):
 
     # Converts our units to the force unit amu A (0.1ps)^-2
     # We now have Kj/(mol * A) = 1000 kg m mol^-1 A^-1 s^-2
-    cf = 1.6605*6.022e-1 # Is really close to 1
+    #cf = 1.6605*6.022e-1 # Is really close to 1
 
     # Read the xyz file and retrieve initial positions
     pos, atoms, nr_atoms = io_sim.read_xyz(file_name)
@@ -100,7 +100,7 @@ def integration(k, r_0, delta_t, m, file_name, update):
         while t < T:
             t += delta_t
 
-            (pos, v) = update(pos, v, k, r_0, delta_t, cf)
+            (pos, v) = update(pos, v, k, r_0, delta_t)
 
             output_file.write("{}".format(nr_atoms) + '\n')
             output_file.write("Comments" + '\n')
@@ -111,25 +111,25 @@ def integration(k, r_0, delta_t, m, file_name, update):
     return
 
 
-def update_euler(pos, v, k, r_0, delta_t, cf):
+def update_euler(pos, v, k, r_0, delta_t):
     """
     Performs an update step using the euler algorithm
     """
 
-    f = cf*compute_force(pos, v, k, r_0)
+    f = compute_force(pos, v, k, r_0)
     (pos_new, v_new) = integrators.integrator_euler(pos, v, f, m, delta_t)
 
     return pos_new, v_new
 
 
-def update_vv(pos, v, k, r_0, delta_t, cf):
+def update_vv(pos, v, k, r_0, delta_t):
     """
     Performs an update step using the velocity verlet algorithm
     """
 
-    f = cf*compute_force(pos, v, k, r_0)
+    f = compute_force(pos, v, k, r_0)
     pos_new = integrators.integrator_velocity_verlet_pos(pos, v, f, m, delta_t)
-    f_new = cf*compute_force(pos, v, k, r_0)
+    f_new = compute_force(pos, v, k, r_0)
     v_new = integrators.integrator_velocity_verlet_vel(v, f, f_new, m, delta_t)
 
     return pos_new, v_new
@@ -207,7 +207,7 @@ if __name__ == "__main__":
     r_0 = 0.74 # A
     delta_t = 0.001 # 0.1 ps or 10^-13 s
     m = np.array([1.00784, 1.00784]) # amu 
-    file_name = "data/Water2.xyz"
+    file_name = "data/water2.xyz"
 
     # # Oxygen atoms
     # k = 1
