@@ -37,7 +37,7 @@ def integration_verlet(k, r_0, delta_t, m, file_name):
         output_file.write("{}".format(nr_atoms) + '\n')
         output_file.write("Comments" + '\n')
 
-        for atom_name, atom in pos:
+        for atom_name, atom in enumerate(pos):
             output_file.write(helper.atom_string(atoms[atom_name], atom))
 
         # We set one step using euler
@@ -94,7 +94,7 @@ def integration(k, r_0, delta_t, m, file_name, update):
         output_file.write("{}".format(nr_atoms) + '\n')
         output_file.write("Comments" + '\n')
 
-        for atom_name, atom in pos:
+        for atom_name, atom in enumerate(pos):
             output_file.write(helper.atom_string(atoms[atom_name], atom))
 
         while t < T:
@@ -199,6 +199,55 @@ def compute_force_h2o(pos):
 
     return np.array([force_oxygen, force_hydrogen_1, force_hydrogen_2])
 
+def integration_h20(delta_t, m, file_name, update):
+    """
+    Numerical integration using either the euler or velocity verlet algorithm,
+    for linear atoms
+    
+    Input:
+        k: bond constant, in Kj mol^-1 A^-2
+        r_0: stationary distance, in A
+        delta_t: timesetp, in 0.1 ps or 10^-13 s
+        m: masses of atoms, in amu (numpy array)
+        file_name: file name of xyz file with initial pos
+    """
+    T = 1 # in 0.1 ps, or 10^-13s
+    t = 0
+
+    # Converts our units to the force unit amu A (0.1ps)^-2
+    # We now have Kj/(mol * A) = 1000 kg m mol^-1 A^-1 s^-2
+    cf = 1.6605*6.022e-1 # Is really close to 1
+
+    # Read the xyz file and retrieve initial positions
+    pos, atoms, nr_atoms = io_sim.read_xyz(file_name)
+
+    # Generate random initial velocity
+    v_init_1 = helper.random_unit_vector(0.1)
+    v_init_2 = helper.random_unit_vector(0.1)
+    v = np.array([v_init_1, v_init_2])
+
+    # Open the file we write the output to 
+    with open("output/result_h2.xyz", "a") as output_file:
+        output_file.write("{}".format(nr_atoms) + '\n')
+        output_file.write("Comments" + '\n')
+
+        for atom_name, atom in pos:
+            output_file.write(helper.atom_string(atoms[atom_name], atom))
+
+        while t < T:
+            t += delta_t
+
+            (pos, v) = update(pos, v, k, r_0, delta_t, cf)
+
+            output_file.write("{}".format(nr_atoms) + '\n')
+            output_file.write("Comments" + '\n')
+
+            for atom_name, atom in enumerate(pos):
+                output_file.write(helper.atom_string(atoms[atom_name], atom))
+
+    return
+
+
 # Testing of the functions
 if __name__ == "__main__":
 
@@ -207,7 +256,7 @@ if __name__ == "__main__":
     r_0 = 0.74 # A
     delta_t = 0.001 # 0.1 ps or 10^-13 s
     m = np.array([1.00784, 1.00784]) # amu 
-    file_name = "data/Water2.xyz"
+    file_name = "data/water_small.xyz"
 
     # # Oxygen atoms
     # k = 1
