@@ -38,7 +38,7 @@ def integrator_verlet_pos(x, x_old, f, m, delta_t):
 
     return x_new
 
-def integrator_verlet_vel(x_new, x_old, f, m, delta_t):
+def integrator_verlet_vel(x_new, x_old, delta_t):
     """
     Applies verlet algorithm to the velocity
 
