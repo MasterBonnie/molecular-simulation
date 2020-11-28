@@ -3,11 +3,17 @@ import numpy as np
 """ helper functions and constants """
 
 def unit_vector(vector):
-    """ Returns the unit vector of the vector.  """
-    return vector / np.linalg.norm(vector)
+    """ 
+    Returns the unit vector of the vector.  
+    if input is matrix does this for each row.
+    """
+    # return vector / np.linalg.norm(vector)
+    return vector/np.linalg.norm(vector, ord=2, axis=1, keepdims=True)
+
 
 def angle_between(v1, v2):
-    """ Returns the angle in radians between vectors 'v1' and 'v2'
+    """ 
+    Returns the angle in radians between vectors 'v1' and 'v2'
     """
     v1_u = unit_vector(v1)
     v2_u = unit_vector(v2)

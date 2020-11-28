@@ -5,6 +5,40 @@ from static_state import compute_force_h2o, compute_force
 from helper import atom_string, random_unit_vector
 import integrators
 
+def integration_2(m, dt, file_xyz, file_top, file_out, verlet = False):
+
+    T = 0.1 # in 0.1 ps, or 10^-13s
+    t = 0
+
+    # Get all external variables
+    pos, atoms, nr_atoms = io_sim.read_xyz(file_xyz)
+    bonds, const_bonds, angles, const_angles = io_sim.read_topology(file_top)
+
+    # Open the output file
+    with open(file_out, "w") as output_file:
+        output_file.write("{}".format(nr_atoms) + '\n')
+        output_file.write("Comments" + '\n')
+
+        # I/O operations
+        for atom_name, atom in enumerate(pos):
+            output_file.write(atom_string(atoms[atom_name], atom))
+
+        while t < T:
+            
+
+            
+            
+            t += delta_t
+
+            # I/O operations
+            for atom_name, atom in enumerate(pos):
+                output_file.write(atom_string(atoms[atom_name], atom))
+
+    return
+
+
+
+
 def integration(k, r_0, delta_t, m, file_name, update, verlet = False):
     """
     Numerical integration using either the euler or velocity verlet algorithm 
@@ -45,6 +79,7 @@ def integration(k, r_0, delta_t, m, file_name, update, verlet = False):
             output_file.write(atom_string(atoms[atom_name], atom))
 
         # TODO: pls change thenk
+        # Should not recalculate diff and dis here
         diff = pos - pos[:, np.newaxis]
         dis = np.linalg.norm(diff, axis=2)
         r = dis[0][1]
@@ -55,7 +90,7 @@ def integration(k, r_0, delta_t, m, file_name, update, verlet = False):
             # We set one step using euler
             t += delta_t
             pos_old = pos
-            (pos, v) = update_euler(pos, v, k, r_0, delta_t, cf)
+            (pos, v) = update_euler(pos, v, delta_t, cf, k, r_0)
 
         while t < T:
             t += delta_t
@@ -67,7 +102,7 @@ def integration(k, r_0, delta_t, m, file_name, update, verlet = False):
                 # This v is the velocity at the previous timestep
                 v = integrators.integrator_verlet_vel(pos, pos_old, delta_t)            
             else:
-                (pos, v) = update(pos, v, k, r_0, delta_t, cf)
+                (pos, v) = update(pos, v, delta_t, cf, k, r_0)
             
             # I/O operations
             output_file.write("{}".format(nr_atoms) + '\n')
@@ -85,42 +120,18 @@ def integration(k, r_0, delta_t, m, file_name, update, verlet = False):
 
     return
 
-def update_h20_euler(pos, v, k, r_0, delta_t, cf):
-    """
-    Performs an update step using the euler algorithm for H2O
-    """
 
-    f = cf*compute_force_h2o(pos)
-    pos_new, v_new = integrators.integrator_euler(pos, v, f, m, delta_t)
-
-    return pos_new, v_new
-
-def update_h20_vv(pos, v, k, r_0, delta_t, cf):
-    """
-    Performs an update step using the velocity verlet algorithm
-    """
-
-    f = cf*compute_force_h2o(pos)
-    pos_new = integrators.integrator_velocity_verlet_pos(pos, v, f, m, delta_t)
-    f_new = cf*compute_force_h2o(pos)
-    v_new = integrators.integrator_velocity_verlet_vel(v, f, f_new, m, delta_t)
-
-    return pos_new, v_new
-
-
-def update_euler(pos, v, k, r_0, delta_t, cf):
+def update_euler(pos, v, delta_t, cf, k, r_0):
     """
     Performs an update step using the euler algorithm
     """
 
     f = cf*compute_force(pos, k, r_0)
-    print(f)
     (pos_new, v_new) = integrators.integrator_euler(pos, v, f, m, delta_t)
 
     return pos_new, v_new
 
-
-def update_vv(pos, v, k, r_0, delta_t, cf):
+def update_vv(pos, v, delta_t, cf, k, r_0):
     """
     Performs an update step using the velocity verlet algorithm
     """
@@ -131,7 +142,6 @@ def update_vv(pos, v, k, r_0, delta_t, cf):
     v_new = integrators.integrator_velocity_verlet_vel(v, f, f_new, m, delta_t)
 
     return pos_new, v_new
-
 
 # Testing of the functions
 if __name__ == "__main__":
