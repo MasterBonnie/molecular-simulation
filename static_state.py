@@ -72,3 +72,67 @@ def force_angular(direction, theta, dis, k, theta_0):
     force = magnitude_force* helper.unit_vector(direction)
 
     return force
+
+def compute_force(pos, v, k, r_0):
+    """
+    Computes the force on a linear model
+    """
+
+    diff = pos - pos[:, np.newaxis]
+    dis = np.linalg.norm(diff, axis=2)
+
+    force = force_bond(diff[0][1], dis[0][1], k, r_0)
+
+    return np.array([-force, force])
+
+def compute_force_h2o(pos):
+    """
+    Computes the force on H2O molecule
+
+    Hard coded for reasons I cannot explain
+    """
+    # Calculate the force on each molecule
+    k_b = 5024.16    # Kj mol^-1 A^-2
+    r_0 = 0.9572   # A
+
+    theta_0 = 104.52 *(np.pi/180)   # Radians
+    k_ang = 628.02  # Kj mol^-1 rad^-2
+
+    diff = pos - pos[:, np.newaxis]
+    dis = np.linalg.norm(diff, axis=2)
+
+    theta = helper.angle_between(diff[0][1], diff[0][2])
+    #print(theta*180/np.pi)
+
+    # Create the unit vector along which the angular force acts
+    # This is the right molecule, and so we need this -1 here
+    angular_force_unit_1 = helper.unit_vector(-np.cross(np.cross(diff[0][1], diff[0][2]), diff[0][1]))
+
+    # Calculate the angular and bond force on Hydrogen atom 1
+    angular_force_1 = force_angular(angular_force_unit_1,
+                                                    theta,
+                                                    dis[0][1],
+                                                    k_ang,
+                                                    theta_0)
+    bond_force_1 = force_bond(diff[0][1], dis[0][1], k_b, r_0)
+
+    # Total force on hydrogen atom 1
+    force_hydrogen_1 = (angular_force_1 + bond_force_1)
+
+    # Again create unit vector for angular force
+    # This one already points in the right direction
+    angular_force_unit_2 = helper.unit_vector(np.cross(np.cross(diff[0][1], diff[0][2]), diff[0][2]))
+
+    # Angular force
+    angular_force_2 = force_angular(angular_force_unit_2,
+                                                    theta,
+                                                    dis[0][2],
+                                                    k_ang,
+                                                    theta_0)
+    bond_force_2 = force_bond(diff[0][2], dis[0][2], k_b, r_0)
+
+    # Total force on Hydrogen atom 2
+    force_hydrogen_2 = (angular_force_2 + bond_force_2)
+    force_oxygen = -(force_hydrogen_1 + force_hydrogen_2)
+
+    return np.array([force_oxygen, force_hydrogen_1, force_hydrogen_2])

@@ -1,8 +1,8 @@
 import numpy as np
 
 import io_sim
-import static_state
-import helper
+from static_state import compute_force_h2o, compute_force
+from helper import atom_string, random_unit_vector
 import integrators
 
 def integration_verlet(k, r_0, delta_t, m, file_name):
@@ -28,9 +28,7 @@ def integration_verlet(k, r_0, delta_t, m, file_name):
     pos, atoms, nr_atoms = io_sim.read_xyz(file_name)
 
     # Generate random initial velocity
-    v_init_1 = helper.random_unit_vector(0.1)
-    v_init_2 = helper.random_unit_vector(0.1)
-    v = np.array([v_init_1, v_init_2])
+    v = np.array([random_unit_vector(0.1) for i in range(nr_atoms)])
 
     # Open the file we write the output to 
     with open("output/result_h2.xyz", "a") as output_file:
@@ -38,7 +36,7 @@ def integration_verlet(k, r_0, delta_t, m, file_name):
         output_file.write("Comments" + '\n')
 
         for atom_name, atom in enumerate(pos):
-            output_file.write(helper.atom_string(atoms[atom_name], atom))
+            output_file.write(atom_string(atoms[atom_name], atom))
 
         # We set one step using euler
         t += delta_t
@@ -58,14 +56,13 @@ def integration_verlet(k, r_0, delta_t, m, file_name):
             output_file.write("Comments" + '\n')
 
             for atom_name, atom in enumerate(pos):
-                output_file.write(helper.atom_string(atoms[atom_name], atom))
+                output_file.write(atom_string(atoms[atom_name], atom))
 
     return
 
 def integration(k, r_0, delta_t, m, file_name, update):
     """
-    Numerical integration using either the euler or velocity verlet algorithm,
-    for linear atoms
+    Numerical integration using either the euler or velocity verlet algorithm
     
     Input:
         k: bond constant, in Kj mol^-1 A^-2
@@ -87,7 +84,7 @@ def integration(k, r_0, delta_t, m, file_name, update):
     pos, atoms, nr_atoms = io_sim.read_xyz(file_name)
 
     # Generate random initial velocity
-    v = np.array([helper.random_unit_vector(0.1) for i in range(nr_atoms)])
+    v = np.array([random_unit_vector(0.1) for i in range(nr_atoms)])
 
     # Open the file we write the output to 
     with open("output/result_h2.xyz", "a") as output_file:
@@ -95,7 +92,7 @@ def integration(k, r_0, delta_t, m, file_name, update):
         output_file.write("Comments" + '\n')
 
         for atom_name, atom in enumerate(pos):
-            output_file.write(helper.atom_string(atoms[atom_name], atom))
+            output_file.write(atom_string(atoms[atom_name], atom))
 
         while t < T:
             t += delta_t
@@ -106,7 +103,7 @@ def integration(k, r_0, delta_t, m, file_name, update):
             output_file.write("Comments" + '\n')
 
             for atom_name, atom in enumerate(pos):
-                output_file.write(helper.atom_string(atoms[atom_name], atom))
+                output_file.write(atom_string(atoms[atom_name], atom))
 
     return
 
@@ -157,70 +154,6 @@ def update_vv(pos, v, k, r_0, delta_t, cf):
     return pos_new, v_new
 
 
-def compute_force(pos, v, k, r_0):
-    """
-    Computes the force on a linear model
-    """
-
-    diff = pos - pos[:, np.newaxis]
-    dis = np.linalg.norm(diff, axis=2)
-
-    force = static_state.force_bond(diff[0][1], dis[0][1], k, r_0)
-
-    return np.array([-force, force])
-
-def compute_force_h2o(pos):
-    """
-    Computes the force on H2O molecule
-    """
-    # Calculate the force on each molecule
-    k_b = 5024.16    # Kj mol^-1 A^-2
-    r_0 = 0.9572   # A
-
-    theta_0 = 104.52 *(np.pi/180)   # Radians
-    k_ang = 628.02  # Kj mol^-1 rad^-2
-
-    diff = pos - pos[:, np.newaxis]
-    dis = np.linalg.norm(diff, axis=2)
-
-    theta = helper.angle_between(diff[0][1], diff[0][2])
-    #print(theta*180/np.pi)
-
-    # Create the unit vector along which the angular force acts
-    # This is the right molecule, and so we need this -1 here
-    angular_force_unit_1 = helper.unit_vector(-np.cross(np.cross(diff[0][1], diff[0][2]), diff[0][1]))
-
-    # Calculate the angular and bond force on Hydrogen atom 1
-    angular_force_1 = static_state.force_angular(angular_force_unit_1,
-                                                    theta,
-                                                    dis[0][1],
-                                                    k_ang,
-                                                    theta_0)
-    bond_force_1 = static_state.force_bond(diff[0][1], dis[0][1], k_b, r_0)
-
-    # Total force on hydrogen atom 1
-    force_hydrogen_1 = (angular_force_1 + bond_force_1)
-
-    # Again create unit vector for angular force
-    # This one already points in the right direction
-    angular_force_unit_2 = helper.unit_vector(np.cross(np.cross(diff[0][1], diff[0][2]), diff[0][2]))
-
-    # Angular force
-    angular_force_2 = static_state.force_angular(angular_force_unit_2,
-                                                    theta,
-                                                    dis[0][2],
-                                                    k_ang,
-                                                    theta_0)
-    bond_force_2 = static_state.force_bond(diff[0][2], dis[0][2], k_b, r_0)
-
-    # Total force on Hydrogen atom 2
-    force_hydrogen_2 = (angular_force_2 + bond_force_2)
-
-    force_oxygen = -(force_hydrogen_1 + force_hydrogen_2)
-
-    return np.array([force_oxygen, force_hydrogen_1, force_hydrogen_2])
-
-
 # Testing of the functions
 if __name__ == "__main__":
 
@@ -230,6 +163,7 @@ if __name__ == "__main__":
     delta_t = 0.001 # 0.1 ps or 10^-13 s
     m = np.array([1.00784, 1.00784]) # amu 
     file_name = "data/hydrogen_small.xyz"
+    update = update_euler
 
     # # Oxygen atoms
     # k = 1
@@ -245,5 +179,5 @@ if __name__ == "__main__":
     # m = np.array([15.999, 1.00784, 1.00784]) # amu
     # file_name = "data/water_small.xyz"
 
-    integration(k, r_0, delta_t, m, file_name, update_vv)
+    integration(k, r_0, delta_t, m, file_name, update)
     #integration_verlet(k, r_0, delta_t, m, file_name)
