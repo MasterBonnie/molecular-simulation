@@ -73,7 +73,7 @@ def force_angular(direction, theta, dis, k, theta_0):
 
     return force
 
-def compute_force(pos, v, k, r_0):
+def compute_force(pos, k, r_0):
     """
     Computes the force on a linear model
     """
