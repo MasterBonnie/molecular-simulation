@@ -1,5 +1,12 @@
 import numpy as np
 
+"""
+    File containing the integrator implementations
+    notice that these are all made to update the entire system at once,
+    i.e. they require all the positions, velocities, forces and masses of 
+    the entire system
+"""
+
 def integrator_euler(x, v, f, m, delta_t):
     """
     Applies the euler time-integration
