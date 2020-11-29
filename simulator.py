@@ -1,12 +1,11 @@
 import numpy as np
 
 import io_sim
-from static_state import compute_force_h2o, compute_force
 from helper import atom_string, random_unit_vector, unit_vector
 import integrators
 
-def integration_2(m, dt, file_xyz, file_top, file_out, file_observable, 
-                integrator="vv", observable_function = None):
+def integration(m, dt, T, file_xyz, file_top, file_out, file_observable, 
+                observable_function = None, integrator="vv"):
     """
     Numerical integration using either the euler algorithm,
     velocity verlet (vv) algorithm, or the verlet (v) algorithm.
@@ -16,6 +15,7 @@ def integration_2(m, dt, file_xyz, file_top, file_out, file_observable,
     Input:
         m: Array of masses of atoms in amu, in same order as in the xyz file
         dt: time step in 0.1 ps, or 10^-13 s
+        T: Length of simulation, in 0.1 ps
         file_xyz: relative path to the xyz file
         file_top: relative path to the topology file
         file_out: relative path to the desired output file
@@ -33,7 +33,6 @@ def integration_2(m, dt, file_xyz, file_top, file_out, file_observable,
         print("No integrator selected")
         return
 
-    T = 10 # in 0.1 ps, or 10^-13s
     t = 0
 
     # Converts our force units to the force 
@@ -48,7 +47,7 @@ def integration_2(m, dt, file_xyz, file_top, file_out, file_observable,
     v = np.array([random_unit_vector(0.1) for i in range(nr_atoms)])
 
     # Open the output file
-    # I dont think it matters to much to have these files open during the calculation
+    # I dont think it matters too much to have these files open during the calculation
     with open(file_out, "w") as output_file, open(file_observable, "w") as obs_file:
         output_file.write("{}".format(nr_atoms) + '\n')
         output_file.write("Comments" + '\n')
@@ -57,9 +56,12 @@ def integration_2(m, dt, file_xyz, file_top, file_out, file_observable,
         for atom_name, atom in enumerate(pos):
             output_file.write(atom_string(atoms[atom_name], atom))
 
+        # If we use the verlet integrator, we take one step using the 
+        # Euler algorithm at first. It is easier to do this outside
+        # the while loop
         if integrator == "v":
             pos_old = pos
-            f = cf*compute_force_n(pos, bonds, const_bonds, angles,
+            f = cf*compute_force(pos, bonds, const_bonds, angles,
                             const_angles, nr_atoms)
 
             # If we want to calculate something
@@ -73,19 +75,20 @@ def integration_2(m, dt, file_xyz, file_top, file_out, file_observable,
         while t < T:
             
             # Compute the force on the entire system
-            f = cf*compute_force_n(pos, bonds, const_bonds, angles,
+            f = cf*compute_force(pos, bonds, const_bonds, angles,
                             const_angles, nr_atoms)
 
             # if we want to calculate something
             if observable_function:
                 observable_function(pos, v, f, obs_file)
 
+            # Based on the integrator we update the current pos and v
             if integrator == "euler":
                 (pos, v) = integrators.integrator_euler(pos, v, f, m, dt)
 
             elif integrator == "vv":
                 pos = integrators.integrator_velocity_verlet_pos(pos, v, f, m, dt)
-                f_new = cf*compute_force_n(pos, bonds, const_bonds, angles,
+                f_new = cf*compute_force(pos, bonds, const_bonds, angles,
                                     const_angles, nr_atoms)
                 v = integrators.integrator_velocity_verlet_vel(v, f, f_new, m, dt)
 
@@ -105,181 +108,114 @@ def integration_2(m, dt, file_xyz, file_top, file_out, file_observable,
 
     return
 
-
-
-
-def integration(k, r_0, delta_t, m, file_name, update, verlet = False):
+def compute_force(pos, bonds, const_bonds, angles, const_angles, nr_atoms):
     """
-    Numerical integration using either the euler or velocity verlet algorithm 
-    (if verlet is false)
-    or use the regular verlet algorithm if verlet is true
-    
+    Computes the force on each atom, given the position and information from a 
+    topology file.
+
     Input:
-        k: bond constant, in Kj mol^-1 A^-2
-        r_0: stationary distance, in A
-        delta_t: timesetp, in 0.1 ps or 10^-13 s
-        m: masses of atoms, in amu (numpy array)
-        file_name: file name of xyz file with initial pos
-        update: which update function to use (euler vs vv)
-        verlet: Boolean specifying if verlet should be run or not
+        pos: np array containing the positions
+        bonds: index array of the bonds
+        const_bonds: array containing the constant associated with each bond
+        angles: index array of the angles
+        const_angles: array containing the constant associated with each angle
+        nr_atoms: number of atoms in the system
+    Output:
+        force_total: numpy array containing the force acting on each molecule
 
-    outputs a xyz file
+    NOTE: See also the implementation of read_topology in io_sim
     """
-    T = 10 # in 0.1 ps, or 10^-13s
-    t = 0
-
-    # Converts our units to the force unit amu A (0.1ps)^-2
-    # We now have Kj/(mol * A) = 1000 kg m mol^-1 A^-1 s^-2
-    cf = 1.6605*6.022e-1 # Is really close to 1
-
-    # Read the xyz file and retrieve initial positions
-    pos, atoms, nr_atoms = io_sim.read_xyz(file_name)
-
-    # Generate random initial velocity
-    v = np.array([random_unit_vector(0.1) for i in range(nr_atoms)])
-
-    # Open the file we write the output to 
-    with open("output/result_h2.xyz", "w") as output_file, open("output/result_phase.csv", "w") as result_file:
-        output_file.write("{}".format(nr_atoms) + '\n')
-        output_file.write("Comments" + '\n')
-
-        # I/O operations
-        for atom_name, atom in enumerate(pos):
-            output_file.write(atom_string(atoms[atom_name], atom))
-
-        # TODO: pls change thenk
-        # Should not recalculate diff and dis here
-        diff = pos - pos[:, np.newaxis]
-        dis = np.linalg.norm(diff, axis=2)
-        r = dis[0][1]
-        v_plot = np.linalg.norm(v)
-        result_file.write("{}, {} \n".format(r, v_plot))
-
-        if verlet:   
-            # We set one step using euler
-            t += delta_t
-            pos_old = pos
-            (pos, v) = update_euler(pos, v, delta_t, cf, k, r_0)
-
-        while t < T:
-            t += delta_t
-
-            if verlet:
-                f = compute_force(pos, k, r_0)
-                pos_old, pos = pos, integrators.integrator_verlet_pos(pos, pos_old, f, m, delta_t)
-                
-                # This v is the velocity at the previous timestep
-                v = integrators.integrator_verlet_vel(pos, pos_old, delta_t)            
-            else:
-                (pos, v) = update(pos, v, delta_t, cf, k, r_0)
-            
-            # I/O operations
-            output_file.write("{}".format(nr_atoms) + '\n')
-            output_file.write("Comments" + '\n')
-
-            # TODO: pls change this it bad
-            diff = pos - pos[:, np.newaxis]
-            dis = np.linalg.norm(diff, axis=2)
-            r = dis[0][1]
-            v_plot = np.linalg.norm(v)
-            result_file.write("{}, {} \n".format(r, v_plot))
-
-            for atom_name, atom in enumerate(pos):
-                output_file.write(atom_string(atoms[atom_name], atom))
-
-    return
-
-def compute_force_n(pos, bonds, const_bonds, angles, const_angles, nr_atoms):
     force_total = np.zeros((nr_atoms, 3))
 
-    # Bonds
-    # These are all diferences we need for bonds
+    # Forces due to bonds between atoms
+
+    # Difference vectors for the bonds, and the
+    # distance between these atoms
     diff = pos[bonds[:,0]] - pos[bonds[:,1]]
-    
     dis = np.linalg.norm(diff, axis=1)
 
+    # Calculate the forces between the atoms
     magnitudes = np.multiply(-const_bonds[:,0], dis - const_bonds[:,1])
     force = magnitudes[:, np.newaxis]*unit_vector(diff)
 
+    # Add them to the total force
     np.add.at(force_total, bonds[:,0], force)
     np.add.at(force_total, bonds[:,1], -force)
 
-    # Angles
+    # Forces due to angles in molecules
+    # If there are no angles in the molecule,
+    # we just return
+    if not angles:
+        return force_total
+    
+    # The difference vectors we need for the angles
+    # 
+    # TODO: see if there is a way to combine these 
+    # with the differences calculated for the bonds,
+    # to avoid calculating some twice
     diff_1 = pos[angles[:,1]] - pos[angles[:,0]]
     diff_2 = pos[angles[:,1]] - pos[angles[:,2]]
 
+    # Calculates the row-wise dot product between
+    # diff_1 and diff_2
     dot = np.einsum('ij,ij->i', diff_1, diff_2)
 
+    # We then get the angle from this
     ang = np.arccos(dot)
     
+    # The constant we need for the force calculation
     mag_ang = np.multiply(-const_angles[:,0], ang - const_angles[:,1])
 
+    # Calculate the direction vectors for the forces 
+    # TODO: does cross return a unit vector already?
     angular_force_unit_1 = unit_vector(np.cross(np.cross(diff_1, diff_2), diff_1))
     angular_force_unit_2 = -unit_vector(np.cross(np.cross(diff_1, diff_2), diff_2))
 
+    # Actually calculate the forces
     force_ang_1 = np.multiply(np.multiply(mag_ang, np.linalg.norm(diff_1, axis=1))[:, np.newaxis], angular_force_unit_1)
     force_ang_2 = np.multiply(np.multiply(mag_ang, np.linalg.norm(diff_2, axis=1))[:, np.newaxis], angular_force_unit_2)
     
+    # Add them to the total force
     np.add.at(force_total, angles[:,0], force_ang_1)
     np.add.at(force_total, angles[:,2], force_ang_2)
     np.add.at(force_total, angles[:,1], -(force_ang_1 + force_ang_2))
 
     return force_total
 
-def update_euler(pos, v, delta_t, cf, k, r_0):
+def phase_space_h(pos, v, f, obs_file):
     """
-    Performs an update step using the euler algorithm
+    Example of how the observable function can be used in the integrator function
+    Calculates phase space data for a single hydrogen molecule, for use in the 
+    report
     """
+    # NOTE: this is pretty bad if it was not used for 
+    # only the toy example of a single hydrogen molecule
+    diff = pos - pos[:, np.newaxis]
+    dis = np.linalg.norm(diff, axis=2)
 
-    f = cf*compute_force(pos, k, r_0)
-    (pos_new, v_new) = integrators.integrator_euler(pos, v, f, m, delta_t)
-
-    return pos_new, v_new
-
-def update_vv(pos, v, delta_t, cf, k, r_0):
-    """
-    Performs an update step using the velocity verlet algorithm
-    """
-
-    f = cf*compute_force(pos, k, r_0)
-    pos_new = integrators.integrator_velocity_verlet_pos(pos, v, f, m, delta_t)
-    f_new = cf*compute_force(pos_new, k, r_0)
-    v_new = integrators.integrator_velocity_verlet_vel(v, f, f_new, m, delta_t)
-
-    return pos_new, v_new
+    r = dis[0][1]
+    v_plot = np.linalg.norm(v)
+    
+    obs_file.write("{}, {} \n".format(r, v_plot))
 
 # Testing of the functions
 if __name__ == "__main__":
 
-    # Hydrogen atoms
-    # k = 245.31 # Kj mol^-1 A^-2
-    # r_0 = 0.74 # A
-    # delta_t = 0.001 # 0.1 ps or 10^-13 s
-    # m = np.array([1.00784, 1.00784]) # amu 
-    # file_name = "data/hydrogen_small.xyz"
+    # Water file
+    # m = np.array([15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784]) # amu
+    # dt = 0.001 # 0.1 ps
+    # file_xyz = "data/water_top.xyz"
+    # file_top = "data/top.itp"
+    # file_out = "output/result.xyz"
+    # file_observable = "output/result_phase.csv"
 
-    # # Oxygen atoms
-    # k = 1
-    # r_0 = 1
-    # delta_t = 0.001 # 0.1 ps 
-    # m = np.array([15.999, 15.999]) # amu
-    # file_name = "data/oxygenSmall.xyz"
-
-    # # Water molecule
-    # k = 1
-    # r_0 = 1
-    # delta_t = 0.0005 # 0.1 ps 
-    # m = np.array([15.999, 1.00784, 1.00784]) # amu
-    # file_name = "data/water_small.xyz"
-
-    #integration(k, r_0, delta_t, m, file_name, update_euler)
-    #integration_verlet(k, r_0, delta_t, m, file_name)
-
-    m = np.array([15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784])
-    dt = 0.001
-    file_xyz = "data/water_top.xyz"
-    file_top = "data/top.itp"
-    file_out = "output/result.xyz"
+    # Hydrogen file
+    m = np.array([1.00784, 1.00784]) # amu
+    dt = 0.001 # 0.1 ps
+    T = 1 # 0.1 ps
+    file_xyz = "data/hydrogen_top.xyz"
+    file_top = "data/hydrogen_top.itp"
+    file_out = "output/result_h2.xyz"
     file_observable = "output/result_phase.csv"
 
-    integration_2(m, dt, file_xyz, file_top, file_out, file_observable)
+    integration(m, dt, T, file_xyz, file_top, file_out, file_observable, phase_space_h)

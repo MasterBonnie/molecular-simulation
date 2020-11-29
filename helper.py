@@ -7,7 +7,7 @@ def unit_vector(vector):
     Returns the unit vector of the vector.  
     if input is matrix does this for each row.
     """
-    # return vector / np.linalg.norm(vector)
+    # OLD return vector / np.linalg.norm(vector)
     return vector/np.linalg.norm(vector, ord=2, axis=1, keepdims=True)
 
 
@@ -18,12 +18,6 @@ def angle_between(v1, v2):
     v1_u = unit_vector(v1)
     v2_u = unit_vector(v2)
     return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
-
-def angle_to_radians(angle):
-    """
-    returns the same angle in radians
-    """
-    return
 
 def random_unit_vector(const = 1):
     """
@@ -40,5 +34,4 @@ def atom_string(atom, pos):
     """
     returns string format correct for xyz file
     """
-
     return atom + " " +  np.array2string(pos, separator=" ")[1:-1] + "\n"   
