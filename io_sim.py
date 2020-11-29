@@ -134,8 +134,11 @@ if __name__ == "__main__":
     #print(magnitudes)
     force = magnitudes[:, np.newaxis]*helper.unit_vector(diff)
 
-    force_total[bonds[:,0]] += force
-    force_total[bonds[:,1]] += -force
+    # force_total[bonds[:,0]] += force
+    # force_total[bonds[:,1]] += -force
+    np.add.at(force_total, bonds[:,0], force)
+    np.add.at(force_total, bonds[:,1], -force)
+
 
     # Now force contains the right forces for bonds
 
@@ -162,8 +165,11 @@ if __name__ == "__main__":
     force_ang_1 = np.multiply(np.multiply(mag_ang, np.linalg.norm(diff_1, axis=1))[:, np.newaxis], angular_force_unit_1)
     force_ang_2 = np.multiply(np.multiply(mag_ang, np.linalg.norm(diff_2, axis=1))[:, np.newaxis], angular_force_unit_2)
     
-    force_total[angles[:,0]] += force_ang_1
-    force_total[angles[:,2]] += force_ang_2
-    force_total[angles[:,1]] += -(force_ang_1 + force_ang_2)
+    # force_total[angles[:,0]] += force_ang_1
+    # force_total[angles[:,2]] += force_ang_2
+    # force_total[angles[:,1]] += -(force_ang_1 + force_ang_2)
+    np.add.at(force_total, angles[:,0], force_ang_1)
+    np.add.at(force_total, angles[:,2], force_ang_2)
+    np.add.at(force_total, angles[:,1], -(force_ang_1 + force_ang_2))
 
     print(force_total)
