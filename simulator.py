@@ -1,7 +1,7 @@
 import numpy as np
 
 import io_sim
-from helper import atom_string, random_unit_vector, unit_vector
+from helper import atom_string, random_unit_vector, unit_vector, angle_between
 import integrators
 
 def integration(m, dt, T, file_xyz, file_top, file_out, file_observable, 
@@ -44,12 +44,12 @@ def integration(m, dt, T, file_xyz, file_top, file_out, file_observable,
     bonds, const_bonds, angles, const_angles = io_sim.read_topology(file_top)
 
     # Random initial velocity
-    v = np.array([random_unit_vector(0.1) for i in range(nr_atoms)])
+    v = 0.1*unit_vector(np.random.uniform(size=[nr_atoms,3]))
 
     # Open the output file
     # I dont think it matters too much to have these files open during the calculation
     with open(file_out, "w") as output_file, open(file_observable, "w") as obs_file:
-        output_file.write("{}".format(nr_atoms) + '\n')
+        output_file.write(f"{nr_atoms}" + '\n')
         output_file.write("Comments" + '\n')
 
         # I/O operations
@@ -100,13 +100,14 @@ def integration(m, dt, T, file_xyz, file_top, file_out, file_observable,
             t += dt
 
             # I/O operations
-            output_file.write("{}".format(nr_atoms) + '\n')
+            output_file.write(f"{nr_atoms}" + '\n')
             output_file.write("Comments" + '\n')
 
             for atom_name, atom in enumerate(pos):
                 output_file.write(atom_string(atoms[atom_name], atom))
 
     return
+
 
 def compute_force(pos, bonds, const_bonds, angles, const_angles, nr_atoms):
     """
@@ -156,12 +157,7 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, nr_atoms):
     diff_1 = pos[angles[:,1]] - pos[angles[:,0]]
     diff_2 = pos[angles[:,1]] - pos[angles[:,2]]
 
-    # Calculates the row-wise dot product between
-    # diff_1 and diff_2
-    dot = np.einsum('ij,ij->i', diff_1, diff_2)
-
-    # We then get the angle from this
-    ang = np.arccos(dot)
+    ang = angle_between(diff_1, diff_2)
     
     # The constant we need for the force calculation
     mag_ang = np.multiply(-const_angles[:,0], ang - const_angles[:,1])
@@ -196,26 +192,29 @@ def phase_space_h(pos, v, f, obs_file):
     r = dis[0][1]
     v_plot = np.linalg.norm(v)
     
-    obs_file.write("{}, {} \n".format(r, v_plot))
+    obs_file.write(f"{r}, {v_plot} \n")
 
 # Testing of the functions
 if __name__ == "__main__":
 
     # Water file
-    # m = np.array([15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784]) # amu
-    # dt = 0.001 # 0.1 ps
-    # file_xyz = "data/water_top.xyz"
-    # file_top = "data/top.itp"
-    # file_out = "output/result.xyz"
-    # file_observable = "output/result_phase.csv"
-
-    # Hydrogen file
-    m = np.array([1.00784, 1.00784]) # amu
+    m = np.array([15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784]) # amu
     dt = 0.001 # 0.1 ps
     T = 1 # 0.1 ps
-    file_xyz = "data/hydrogen_top.xyz"
-    file_top = "data/hydrogen_top.itp"
-    file_out = "output/result_h2.xyz"
+    file_xyz = "data/water_top.xyz"
+    file_top = "data/top.itp"
+    file_out = "output/result.xyz"
     file_observable = "output/result_phase.csv"
+    observable_function = None
 
-    integration(m, dt, T, file_xyz, file_top, file_out, file_observable, phase_space_h)
+    # Hydrogen file
+    # m = np.array([1.00784, 1.00784]) # amu
+    # dt = 0.001 # 0.1 ps
+    # T = 1 # 0.1 ps
+    # file_xyz = "data/hydrogen_top.xyz"
+    # file_top = "data/hydrogen_top.itp"
+    # file_out = "output/result_h2.xyz"
+    # file_observable = "output/result_phase.csv"
+    # observable_function = phase_space_h
+
+    integration(m, dt, T, file_xyz, file_top, file_out, file_observable, observable_function)

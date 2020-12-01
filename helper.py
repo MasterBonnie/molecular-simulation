@@ -1,6 +1,6 @@
 import numpy as np
 
-""" helper functions and constants """
+""" helper/misc. functions and constants """
 
 def unit_vector(vector):
     """ 
@@ -15,9 +15,13 @@ def angle_between(v1, v2):
     """ 
     Returns the angle in radians between vectors 'v1' and 'v2'
     """
-    v1_u = unit_vector(v1)
-    v2_u = unit_vector(v2)
-    return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
+    # Calculates the row-wise dot product between
+    # diff_1 and diff_2
+    dot = np.einsum('ij,ij->i', v1, v2)
+
+    # We then get the angle from this
+    ang = np.arccos(dot)
+    return ang
 
 def random_unit_vector(const = 1):
     """
