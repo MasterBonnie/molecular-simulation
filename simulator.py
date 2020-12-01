@@ -146,7 +146,7 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, nr_atoms):
     # Forces due to angles in molecules
     # If there are no angles in the molecule,
     # we just return
-    if not angles:
+    if angles is None:
         return force_total
     
     # The difference vectors we need for the angles
