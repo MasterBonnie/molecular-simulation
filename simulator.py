@@ -168,8 +168,8 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, nr_atoms):
     angular_force_unit_2 = -unit_vector(np.cross(np.cross(diff_1, diff_2), diff_2))
 
     # Actually calculate the forces
-    force_ang_1 = np.multiply(np.multiply(mag_ang, np.linalg.norm(diff_1, axis=1))[:, np.newaxis], angular_force_unit_1)
-    force_ang_2 = np.multiply(np.multiply(mag_ang, np.linalg.norm(diff_2, axis=1))[:, np.newaxis], angular_force_unit_2)
+    force_ang_1 = np.multiply(np.true_divide(mag_ang, np.linalg.norm(diff_1, axis=1))[:, np.newaxis], angular_force_unit_1)
+    force_ang_2 = np.multiply(np.true_divide(mag_ang, np.linalg.norm(diff_2, axis=1))[:, np.newaxis], angular_force_unit_2)
     
     # Add them to the total force
     np.add.at(force_total, angles[:,0], force_ang_1)
