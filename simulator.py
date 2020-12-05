@@ -5,7 +5,7 @@ from helper import atom_string, random_unit_vector, unit_vector, angle_between
 import integrators
 
 def integration(m, dt, T, file_xyz, file_top, file_out, file_observable, 
-                observable_function = None, integrator="vv"):
+                observable_function = None, integrator="vv", write_output = True):
     """
     Numerical integration using either the euler algorithm,
     velocity verlet (vv) algorithm, or the verlet (v) algorithm.
@@ -25,6 +25,7 @@ def integration(m, dt, T, file_xyz, file_top, file_out, file_observable,
                     [euler, v, vv]
         observable_function: function reference for possible calculations to
                             write to file_observable
+        write_output: boolean, whether the computed pos needs to be written to file_out 
     Output:
         Writes an xyz file to the file located at file_out
     """
@@ -49,12 +50,13 @@ def integration(m, dt, T, file_xyz, file_top, file_out, file_observable,
     # Open the output file
     # I dont think it matters too much to have these files open during the calculation
     with open(file_out, "w") as output_file, open(file_observable, "w") as obs_file:
-        output_file.write(f"{nr_atoms}" + '\n')
-        output_file.write("Comments" + '\n')
-
         # I/O operations
-        for atom_name, atom in enumerate(pos):
-            output_file.write(atom_string(atoms[atom_name], atom))
+        if write_output:
+            output_file.write(f"{nr_atoms}" + '\n')
+            output_file.write("Comments" + '\n')
+ 
+            for atom_name, atom in enumerate(pos):
+                output_file.write(atom_string(atoms[atom_name], atom))
 
         # If we use the verlet integrator, we take one step using the 
         # Euler algorithm at first. It is easier to do this outside
@@ -100,11 +102,12 @@ def integration(m, dt, T, file_xyz, file_top, file_out, file_observable,
             t += dt
 
             # I/O operations
-            output_file.write(f"{nr_atoms}" + '\n')
-            output_file.write("Comments" + '\n')
+            if write_output:
+                output_file.write(f"{nr_atoms}" + '\n')
+                output_file.write("Comments" + '\n')
 
-            for atom_name, atom in enumerate(pos):
-                output_file.write(atom_string(atoms[atom_name], atom))
+                for atom_name, atom in enumerate(pos):
+                    output_file.write(atom_string(atoms[atom_name], atom))
 
     return
 
