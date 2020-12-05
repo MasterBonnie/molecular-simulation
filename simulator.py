@@ -78,30 +78,40 @@ def integration(m, dt, T, file_xyz, file_top, file_out, file_observable,
             
             t += dt
 
-        while t < T:
-            
-            # Compute the force on the entire system
-            f = cf*compute_force(pos, bonds, const_bonds, angles,
-                            const_angles, nr_atoms)
+        f = cf*compute_force(pos, bonds, const_bonds, angles,
+                                const_angles, nr_atoms)
 
-            # if we want to calculate something
-            if observable_function:
-                observable_function(pos, v, f, obs_file)
+        while t < T:
 
             # Based on the integrator we update the current pos and v
             if integrator == "euler":
+                # Compute the force on the entire system
+                    
                 (pos, v) = integrators.integrator_euler(pos, v, f, m, dt)
+                
+                f = cf*compute_force(pos, bonds, const_bonds, angles,
+                                const_angles, nr_atoms)
 
             elif integrator == "vv":
                 pos = integrators.integrator_velocity_verlet_pos(pos, v, f, m, dt)
-                f_new = cf*compute_force(pos, bonds, const_bonds, angles,
+                f_old, f = f, cf*compute_force(pos, bonds, const_bonds, angles,
                                     const_angles, nr_atoms)
-                v = integrators.integrator_velocity_verlet_vel(v, f, f_new, m, dt)
+                v = integrators.integrator_velocity_verlet_vel(v, f_old, f, m, dt)
 
             elif integrator == "v":
                 pos_old, pos = pos, integrators.integrator_verlet_pos(pos, pos_old, f, m, dt)
                 # This v is the velocity at the previous timestep
                 v = integrators.integrator_verlet_vel(pos, pos_old, dt) 
+
+                f = cf*compute_force(pos, bonds, const_bonds, angles,
+                                const_angles, nr_atoms)
+
+
+            # if we want to calculate something
+            # NOTE: f might not be correct anymore for the pos and v
+            #   given here!!!
+            if observable_function:
+                observable_function(pos, v, f, obs_file)
             
             t += dt
 
