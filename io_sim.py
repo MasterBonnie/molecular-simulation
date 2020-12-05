@@ -115,7 +115,25 @@ def read_topology(input):
             angles[i] = np.asarray(line[0:3], dtype=np.intc)
             const_angles[i] = np.asarray(line[3:], dtype=np.float)
 
-    return bonds, const_bonds, angles, const_angles
+        line - inputfile.readline()
+
+        if not line:
+            return bonds, const_bonds, angles, const_angles, None, None
+
+        line - line.split()
+        nr_lj = int(line[1])
+
+        lj = np.zeros((nr_lj, 2), dtype=np.intp)
+        const_lj = np.zeros((nr_lj, 2), dtype=np.float)
+
+        for i in range(nr_lj):
+            line = inputfile.readline()
+            line = line.split()
+
+            lj[i] = np.asarray(line[0:2], dtype=np.intp)
+            const_lj = np.asarray(line[2:], dtype=np.float)
+
+    return bonds, const_bonds, angles, const_angles, lj, const_lj
 
 def handle_comment(line):
     """ handles comment line of a xyz file"""
