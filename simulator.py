@@ -1,8 +1,12 @@
 import numpy as np
+import cProfile
 
 import io_sim
-from helper import atom_string, random_unit_vector, unit_vector, angle_between
+import helper
+from helper import atom_string, random_unit_vector, angle_between
 import integrators
+from numba import jit, guvectorize, float64
+import time
 
 def integration(m, dt, T, file_xyz, file_top, file_out, file_observable, 
                 observable_function = None, integrator="vv", write_output = True):
@@ -45,7 +49,7 @@ def integration(m, dt, T, file_xyz, file_top, file_out, file_observable,
     bonds, const_bonds, angles, const_angles = io_sim.read_topology(file_top)
 
     # Random initial velocity
-    v = 0.1*unit_vector(np.random.uniform(size=[nr_atoms,3]))
+    v = 0.1*helper.unit_vector(np.random.uniform(size=[nr_atoms,3]))
 
     # Open the output file
     # I dont think it matters too much to have these files open during the calculation
@@ -111,7 +115,24 @@ def integration(m, dt, T, file_xyz, file_top, file_out, file_observable,
 
     return
 
+@guvectorize([(float64[:], float64[:], float64[:], float64[:,:], float64[:,:])], "(n),(n),(n),(n,p)->(n,p)",
+            nopython=True, cache=True)
+def force_bond(const_bonds_f, const_bonds_d, dis, diff, res):
+    for i in range(dis.shape[0]):
+        res[i] = diff[i]*((-const_bonds_f[i]*(dis[i] - const_bonds_d[i]))/dis[i])
 
+@guvectorize([(float64[:], float64[:], float64[:], float64[:], float64[:,:], float64[:,:])], "(n),(n),(n),(n),(n,p)->(n,p)",
+            nopython=True, cache=True)
+def force_angle(const_angle_f, const_angle_d, angle, dis, direction, res):
+    for i in range(dis.shape[0]):
+        res[i] = direction[i]*((-const_angle_f[i]*(angle[i] - const_angle_d[i]))/dis[i])
+
+@guvectorize([(float64[:,:], float64[:])],"(n,p)->(n)", nopython=True, cache=True)
+def distance(matrix, res):
+    for i in range(matrix.shape[0]):
+        res[i] = np.linalg.norm(matrix[i])
+
+#@jit(nopython=True)
 def compute_force(pos, bonds, const_bonds, angles, const_angles, nr_atoms):
     """
     Computes the force on each atom, given the position and information from a 
@@ -136,11 +157,22 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, nr_atoms):
     # Difference vectors for the bonds, and the
     # distance between these atoms
     diff = pos[bonds[:,0]] - pos[bonds[:,1]]
-    dis = np.linalg.norm(diff, axis=1)
+    #dis = np.linalg.norm(diff, axis=1)
+
+    dis = np.zeros(diff.shape[0])
+    distance(diff, dis)
+
+    #print(dis-dis_n)
 
     # Calculate the forces between the atoms
-    magnitudes = np.multiply(-const_bonds[:,0], dis - const_bonds[:,1])
-    force = magnitudes[:, np.newaxis]*unit_vector(diff)
+    # TODO: dont have to unit vector diff here, as I already calculated the norm
+    #magnitudes = np.multiply(-const_bonds[:,0], dis - const_bonds[:,1])
+    #force = magnitudes[:, np.newaxis]*helper.unit_vector(diff)
+
+    force = np.zeros((diff.shape[0], 3)) 
+    force_bond(const_bonds[:,0], const_bonds[:,1], dis, diff, force)
+
+    #print(force - second_force)
 
     # Add them to the total force
     np.add.at(force_total, bonds[:,0], force)
@@ -160,20 +192,40 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, nr_atoms):
     diff_1 = pos[angles[:,1]] - pos[angles[:,0]]
     diff_2 = pos[angles[:,1]] - pos[angles[:,2]]
 
+    dis_1 = np.zeros(diff_1.shape[0])
+    distance(diff_1, dis_1)
+
+    dis_2 = np.zeros(diff_2.shape[0])
+    distance(diff_2, dis_2)
+
+    #dis_1 = np.linalg.norm(diff_1, axis=1)
+    #dis_2 = np.linalg.norm(diff_2, axis=1)
+
     ang = angle_between(diff_1, diff_2)
     
     # The constant we need for the force calculation
-    mag_ang = np.multiply(-const_angles[:,0], ang - const_angles[:,1])
+    #mag_ang = np.multiply(-const_angles[:,0], ang - const_angles[:,1])
 
     # Calculate the direction vectors for the forces 
     # TODO: does cross return a unit vector already?
-    angular_force_unit_1 = unit_vector(np.cross(np.cross(diff_1, diff_2), diff_1))
-    angular_force_unit_2 = -unit_vector(np.cross(np.cross(diff_1, diff_2), diff_2))
+    cross_1 = np.cross(diff_1, diff_2)
+    angular_force_unit_1 = np.cross(cross_1, diff_1)
+    angular_force_unit_2 = -np.cross(cross_1, diff_2)
 
     # Actually calculate the forces
-    force_ang_1 = np.multiply(np.true_divide(mag_ang, np.linalg.norm(diff_1, axis=1))[:, np.newaxis], angular_force_unit_1)
-    force_ang_2 = np.multiply(np.true_divide(mag_ang, np.linalg.norm(diff_2, axis=1))[:, np.newaxis], angular_force_unit_2)
+    #force_ang_1 = np.multiply(np.true_divide(mag_ang, np.linalg.norm(diff_1, axis=1))[:, np.newaxis], angular_force_unit_1)
+    #force_ang_2 = np.multiply(np.true_divide(mag_ang, np.linalg.norm(diff_2, axis=1))[:, np.newaxis], angular_force_unit_2)
     
+    force_ang_1 = np.zeros((angular_force_unit_1.shape[0],3))
+    force_ang_2 = np.zeros((angular_force_unit_2.shape[0],3))
+    force_angle(const_angles[:,0], const_angles[:,1], ang, dis_1, angular_force_unit_1, force_ang_1)
+    force_angle(const_angles[:,0], const_angles[:,1], ang, dis_2, angular_force_unit_2, force_ang_2)
+
+    #print(force_ang_1 - force_ang_1_n)
+    #print("spatie")
+    #print(force_ang_2 - force_ang_2_n)
+
+
     # Add them to the total force
     np.add.at(force_total, angles[:,0], force_ang_1)
     np.add.at(force_total, angles[:,2], force_ang_2)
@@ -203,21 +255,23 @@ if __name__ == "__main__":
     # Water file
     m = np.array([15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784]) # amu
     dt = 0.001 # 0.1 ps
-    T = 1 # 0.1 ps
+    T = 10 # 0.1 ps
     file_xyz = "data/water_top.xyz"
     file_top = "data/top.itp"
     file_out = "output/result.xyz"
     file_observable = "output/result_phase.csv"
     observable_function = None
+    integrator = "vv"
+    write_output = False
 
     # Hydrogen file
     # m = np.array([1.00784, 1.00784]) # amu
     # dt = 0.001 # 0.1 ps
-    # T = 1 # 0.1 ps
+    # T = 10 # 0.1 ps
     # file_xyz = "data/hydrogen_top.xyz"
     # file_top = "data/hydrogen_top.itp"
     # file_out = "output/result_h2.xyz"
     # file_observable = "output/result_phase.csv"
     # observable_function = phase_space_h
 
-    integration(m, dt, T, file_xyz, file_top, file_out, file_observable, observable_function)
+    cProfile.run("integration(m, dt, T, file_xyz, file_top, file_out, file_observable, observable_function, integrator, write_output)")

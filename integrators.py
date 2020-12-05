@@ -1,4 +1,5 @@
 import numpy as np
+from numba import jit
 
 """
     File containing the integrator implementations
@@ -6,7 +7,6 @@ import numpy as np
     i.e. they require all the positions, velocities, forces and masses of 
     the entire system
 """
-
 def integrator_euler(x, v, f, m, delta_t):
     """
     Applies the euler time-integration
