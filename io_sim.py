@@ -75,10 +75,18 @@ def read_topology(input):
                 rows contain the constants for the 
                 associated angle in the same row as in 
                 angles
+        lj: a nr_lj x 2 np array, whose rows are the pairs
+                between a lj interaction
+        const_lj: a nr_ljx2 np array, whose rows contain the 
+                constant for the associated interaction between
+                molecules in the same row as in lj
 
     NOTE: if there are no angles in the file, angles and
           const_angles are None. We assume there are always 
-          bonds.
+          bonds. Same for lj interactions. For now no angles
+          must mean no lj interactions
+    NOTE: Maybe this has to be changed, as the constants now need
+          to be hard coded for the lj interactions.
     """
 
     with open(input, "r") as inputfile:
@@ -100,7 +108,7 @@ def read_topology(input):
         
         # If there are no angles in the molecule
         if not line:
-            return bonds, const_bonds, None, None
+            return bonds, const_bonds, None, None, None, None
 
         line = line.split()
         nr_angles = int(line[1])
@@ -115,12 +123,12 @@ def read_topology(input):
             angles[i] = np.asarray(line[0:3], dtype=np.intc)
             const_angles[i] = np.asarray(line[3:], dtype=np.float)
 
-        line - inputfile.readline()
+        line = inputfile.readline()
 
         if not line:
             return bonds, const_bonds, angles, const_angles, None, None
 
-        line - line.split()
+        line = line.split()
         nr_lj = int(line[1])
 
         lj = np.zeros((nr_lj, 2), dtype=np.intp)
@@ -131,7 +139,7 @@ def read_topology(input):
             line = line.split()
 
             lj[i] = np.asarray(line[0:2], dtype=np.intp)
-            const_lj = np.asarray(line[2:], dtype=np.float)
+            const_lj[i] = np.asarray(line[2:], dtype=np.float)
 
     return bonds, const_bonds, angles, const_angles, lj, const_lj
 

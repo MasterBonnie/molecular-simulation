@@ -42,10 +42,10 @@ def integration(m, dt, T, file_xyz, file_top, file_out, file_observable,
 
     # Get all external variables
     pos, atoms, nr_atoms = io_sim.read_xyz(file_xyz)
-    bonds, const_bonds, angles, const_angles = io_sim.read_topology(file_top)
+    bonds, const_bonds, angles, const_angles, lj, const_lj = io_sim.read_topology(file_top)
 
     # Random initial velocity
-    v = 0.1*unit_vector(np.random.uniform(size=[nr_atoms,3]))
+    v = 1*unit_vector(np.random.uniform(size=[nr_atoms,3]))
 
     # Open the output file
     # I dont think it matters too much to have these files open during the calculation
@@ -64,7 +64,7 @@ def integration(m, dt, T, file_xyz, file_top, file_out, file_observable,
         if integrator == "v":
             pos_old = pos
             f = cf*compute_force(pos, bonds, const_bonds, angles,
-                            const_angles, nr_atoms)
+                            const_angles, lj, const_lj, nr_atoms)
 
             # If we want to calculate something
             if observable_function:
@@ -78,7 +78,7 @@ def integration(m, dt, T, file_xyz, file_top, file_out, file_observable,
             
             # Compute the force on the entire system
             f = cf*compute_force(pos, bonds, const_bonds, angles,
-                            const_angles, nr_atoms)
+                            const_angles, lj, const_lj, nr_atoms)
 
             # if we want to calculate something
             if observable_function:
@@ -91,7 +91,7 @@ def integration(m, dt, T, file_xyz, file_top, file_out, file_observable,
             elif integrator == "vv":
                 pos = integrators.integrator_velocity_verlet_pos(pos, v, f, m, dt)
                 f_new = cf*compute_force(pos, bonds, const_bonds, angles,
-                                    const_angles, nr_atoms)
+                                    const_angles, lj, const_lj, nr_atoms)
                 v = integrators.integrator_velocity_verlet_vel(v, f, f_new, m, dt)
 
             elif integrator == "v":
@@ -112,7 +112,7 @@ def integration(m, dt, T, file_xyz, file_top, file_out, file_observable,
     return
 
 
-def compute_force(pos, bonds, const_bonds, angles, const_angles, nr_atoms):
+def compute_force(pos, bonds, const_bonds, angles, const_angles, lj, const_lj, nr_atoms):
     """
     Computes the force on each atom, given the position and information from a 
     topology file.
@@ -123,6 +123,8 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, nr_atoms):
         const_bonds: array containing the constant associated with each bond
         angles: index array of the angles
         const_angles: array containing the constant associated with each angle
+        lj: index array of Lennard Jones interaction
+        const_lj: array containing the constant associated with each lj interaction
         nr_atoms: number of atoms in the system
     Output:
         force_total: numpy array containing the force acting on each molecule
@@ -132,7 +134,7 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, nr_atoms):
     force_total = np.zeros((nr_atoms, 3))
 
     # Forces due to bonds between atoms
-
+    #----------------------------------
     # Difference vectors for the bonds, and the
     # distance between these atoms
     diff = pos[bonds[:,0]] - pos[bonds[:,1]]
@@ -146,7 +148,9 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, nr_atoms):
     np.add.at(force_total, bonds[:,0], force)
     np.add.at(force_total, bonds[:,1], -force)
 
+    #----------------------------------
     # Forces due to angles in molecules
+    #----------------------------------
     # If there are no angles in the molecule,
     # we just return
     if angles is None:
@@ -179,6 +183,26 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, nr_atoms):
     np.add.at(force_total, angles[:,2], force_ang_2)
     np.add.at(force_total, angles[:,1], -(force_ang_1 + force_ang_2))
 
+    #----------------------------------
+    # Forces due to Lennard Jones interaction
+    #----------------------------------
+    # Difference vectors
+    diff = pos[lj[:,0]] - pos[lj[:,1]]
+    dis = np.linalg.norm(diff, axis=1)
+
+    x1 = np.true_divide(4*const_lj[:,1], dis)
+    x2 = np.true_divide(const_lj[:,0], dis)
+
+    magnitudes = np.multiply(x1, np.power(x2, 12) - np.power(x2, 6))
+    #print(magnitudes)
+    force = magnitudes[:, np.newaxis]*diff
+    #print(force)
+
+    np.add.at(force_total, lj[:,0], force)
+    np.add.at(force_total, lj[:,1], -force)
+
+    #print(force_total)
+
     return force_total
 
 def phase_space_h(pos, v, f, obs_file):
@@ -201,9 +225,10 @@ def phase_space_h(pos, v, f, obs_file):
 if __name__ == "__main__":
 
     # Water file
-    m = np.array([15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784]) # amu
+    # TODO: probably need another way of getting this one
+    m = np.array([15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784]) # amu
     dt = 0.001 # 0.1 ps
-    T = 1 # 0.1 ps
+    T = 10 # 0.1 ps
     file_xyz = "data/water_top.xyz"
     file_top = "data/top.itp"
     file_out = "output/result.xyz"
