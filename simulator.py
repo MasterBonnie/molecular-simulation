@@ -1,4 +1,5 @@
 import numpy as np
+import math
 
 import io_sim
 from helper import atom_string, random_unit_vector, unit_vector, angle_between
@@ -111,6 +112,34 @@ def integration(m, dt, T, file_xyz, file_top, file_out, file_observable,
 
     return
 
+#@jit
+def norm(x,y,z):
+    return math.sqrt(x*x + y*y + z*z)
+
+#@jit
+def compute_distance_PBC(pos_1, pos_2, box_length):
+    """
+    Function to compute the distance between two positions when considering
+    periodic boundary conditions
+    """
+    res = np.zeros(pos_1.shape[0])
+
+    for i in range(pos_1.shape[0]):
+        x = min([pos_1[i][0] - pos_2[i][0], 
+                 pos_1[i][0] - pos_2[i][0] + box_length, 
+                 pos_1[i][0] - pos_2[i][0] - box_length])   
+
+        y = min([pos_1[i][1] - pos_2[i][1], 
+                 pos_1[i][1] - pos_2[i][1] + box_length, 
+                 pos_1[i][1] - pos_2[i][1] - box_length])        
+
+        z = min([pos_1[i][2] - pos_2[i][2], 
+                 pos_1[i][2] - pos_2[i][2] + box_length, 
+                 pos_1[i][2] - pos_2[i][2] - box_length])        
+        
+        res[i] = norm(x,y,z)
+
+    return res
 
 def compute_force(pos, bonds, const_bonds, angles, const_angles, lj, const_lj, nr_atoms):
     """
@@ -225,7 +254,7 @@ def phase_space_h(pos, v, f, obs_file):
 if __name__ == "__main__":
 
     # Water file
-    # TODO: probably need another way of getting this one
+    # TODO: probably need another way of getting this one 
     m = np.array([15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784]) # amu
     dt = 0.001 # 0.1 ps
     T = 10 # 0.1 ps
