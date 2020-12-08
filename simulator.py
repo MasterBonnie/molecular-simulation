@@ -1,5 +1,6 @@
 import numpy as np
 import math
+from collections import deque
 
 import io_sim
 from helper import atom_string, random_unit_vector, unit_vector, angle_between
@@ -140,6 +141,27 @@ def compute_distance_PBC(pos_1, pos_2, box_length):
         res[i] = norm(x,y,z)
 
     return res
+
+def create_verlet_list(pos, dis_c, dis_s, nr_atoms, box_length):
+    vl = []
+    vl.append(0)
+    # For every atom:
+    start_list = 0
+    for i in range(pos.shape[0]):
+        nneighbors = 0
+        for j in range(pos.shape[0]):
+            if i == j:
+                continue
+            dis = compute_distance_PBC(pos[i], pos[j], box_length)
+
+            if (dis < dis_s):
+                nneighbors += 1
+                vl.append(j)
+            vl[start_list] = nneighbors
+            start_list = nneighbors + 1
+
+    return vl
+
 
 def compute_force(pos, bonds, const_bonds, angles, const_angles, lj, const_lj, nr_atoms):
     """
