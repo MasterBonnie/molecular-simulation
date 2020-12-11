@@ -105,11 +105,6 @@ def read_topology(input):
             const_bonds[i]= np.asarray(line[2:], dtype=np.float)
 
         line = inputfile.readline()
-        
-        # If there are no angles in the molecule
-        if not line:
-            return bonds, const_bonds, None, None, None, None
-
         line = line.split()
         nr_angles = int(line[1])
 
@@ -124,24 +119,33 @@ def read_topology(input):
             const_angles[i] = np.asarray(line[3:], dtype=np.float)
 
         line = inputfile.readline()
-
-        if not line:
-            return bonds, const_bonds, angles, const_angles, None, None
-
         line = line.split()
         nr_lj = int(line[1])
 
-        lj = np.zeros((nr_lj, 2), dtype=np.intp)
+        lj = np.zeros((nr_lj), dtype=np.int)
         const_lj = np.zeros((nr_lj, 2), dtype=np.float)
 
         for i in range(nr_lj):
             line = inputfile.readline()
             line = line.split()
 
-            lj[i] = np.asarray(line[0:2], dtype=np.intp)
-            const_lj[i] = np.asarray(line[2:], dtype=np.float)
+            lj[i] = np.asarray(line[0], dtype=np.intp)
+            const_lj[i] = np.asarray(line[1:], dtype=np.float)
 
-    return bonds, const_bonds, angles, const_angles, lj, const_lj
+        line = inputfile.readline()
+        line = line.split()
+        nr_molecules = int(line[1])
+
+        molecules = []
+
+        for i in range(nr_molecules):
+            line = inputfile.readline()
+            line = line.split()
+            molecules.append(line)
+        
+        molecules = np.asarray(molecules, dtype=np.int)
+
+    return bonds, const_bonds, angles, const_angles, lj, const_lj, molecules
 
 def handle_comment(line):
     """ handles comment line of a xyz file"""
@@ -156,7 +160,53 @@ def read_json(input):
 
     return data
 
+
+# Maybe we can compile this using numba, or even pre-compile this, as we only call it once
+def create_list(molecules):
+    """
+    Creates list of what atoms are connected given molecules that are
+    connected
+    """
+    matrix = [[0 for j in range(molecules.shape[0])] for i in range(molecules.shape[0])]
+
+    for i in range(molecules.shape[0]):
+        for j in range(molecules.shape[0]):
+            if j > i:
+                matrix[i][j] = cartesianprod(molecules[i], molecules[j])
+
+    return matrix
+
+def neighbor_list(pos, m, molecules, r_cut):
+    pos_matrix = centreOfMass(pos, m, molecules)
+    dis_matrix = np.linalg.norm(pos_matrix - pos_matrix[:, np.newaxis], axis = 2)
+    adj = (0 < dis_matrix) & (dis_matrix < r_cut)
+    # TODO: maybe this can be done better?
+    iu1 = np.tril_indices(adj.shape[0])
+    adj[iu1] = 0
+    return np.transpose(np.nonzero(adj))
+
+def cartesianprod(x,y):
+    Cp = np.transpose([np.tile(x, len(y)), np.repeat(y, len(x))])
+    return Cp   
+
+def centreOfMass(pos,m,molecules):
+    M = np.sum(m[molecules], axis = 1)
+    Mpos = np.sum(m[molecules,np.newaxis]*pos[molecules], axis = 1)
+    Cm = Mpos/M[:,np.newaxis]
+    return Cm
+
 # Testing of the functions
 if __name__ == "__main__":
     pos, atom_names, atoms = read_xyz("data/water_top.xyz")
-    bonds, const_bonds, angles, const_angles = read_topology("data/top.itp")
+    bonds, const_bonds, angles, const_angles, lj, const_lj, molecules = read_topology("data/top.itp")
+    
+    m = np.array([15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784]) # amu
+    r_cut = 4.8
+    matrix = create_list(molecules)
+    nl = neighbor_list(pos, m, molecules, r_cut)
+    print(nl[0])
+    #print(matrix[[0,1]])
+    lj_atoms = np.concatenate([matrix[i[0]][i[1]] for i in nl])
+
+    print(lj_atoms)
+

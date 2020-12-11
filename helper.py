@@ -2,6 +2,11 @@ import numpy as np
 
 """ helper/misc. functions and constants """
 
+_atom_mass = {
+    "O": 15.999,
+    "H": 1.00784,
+}
+
 def unit_vector(vector):
     """ 
     Returns the unit vector of the vector.  
@@ -39,3 +44,14 @@ def atom_string(atom, pos):
     returns string format correct for xyz file
     """
     return atom + " " +  np.array2string(pos, separator=" ")[1:-1] + "\n"   
+
+def atom_name_to_mass(atoms):
+    # Not particulary fast, but good enough for now
+    mass = [_atom_mass[atom] for atom in atoms]
+    return np.array(mass)
+
+
+
+if __name__ == "__main__":
+    test = ["O", "H", "H"]
+    print(atom_name_to_mass(test))
