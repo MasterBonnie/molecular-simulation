@@ -6,7 +6,7 @@ import io_sim
 from helper import atom_string, random_unit_vector, unit_vector, angle_between, atom_name_to_mass
 import integrators
 
-def integration(dt, T, file_xyz, file_top, file_out, file_observable, 
+def integration(dt, T, r_cut, file_xyz, file_top, file_out, file_observable, 
                 observable_function = None, integrator="vv", write_output = True):
     """
     Numerical integration using either the euler algorithm,
@@ -47,13 +47,16 @@ def integration(dt, T, file_xyz, file_top, file_out, file_observable,
     # Mass is given in amu
     m = atom_name_to_mass(atoms)
 
+    # Pre-calculate these, because we need them all anyway, probably
     lj_sigma = np.zeros(nr_atoms)
     lj_sigma[lj] = const_lj[:,0]
     lj_sigma = 0.5*(lj_sigma + lj_sigma[:, np.newaxis])
+    lj_sigma = np.power(lj_sigma, 6)
 
+    # NOTE: multiply with 4 here already
     lj_eps = np.zeros(nr_atoms)
     lj_eps[lj] = const_lj[:, 1]
-    lj_eps = np.sqrt(lj_eps*lj_eps[:, np.newaxis])
+    lj_eps = 4*np.sqrt(lj_eps*lj_eps[:, np.newaxis])
 
     # Create the conversion from molecules to atoms
     # This is for the Lennard-Jones potential
@@ -77,9 +80,13 @@ def integration(dt, T, file_xyz, file_top, file_out, file_observable,
         # Euler algorithm at first. It is easier to do this outside
         # the while loop
         if integrator == "v":
+            nl = neighbor_list(pos, m, molecules, r_cut)
+            # This contains the pure atom interactions
+            lj_atoms = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
+
             pos_old = pos
             f = cf*compute_force(pos, bonds, const_bonds, angles,
-                            const_angles, lj, const_lj, molecules, nr_atoms)
+                            const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms)
 
             # If we want to calculate something
             if observable_function:
@@ -101,7 +108,7 @@ def integration(dt, T, file_xyz, file_top, file_out, file_observable,
 
             # Compute the force on the entire system
             f = cf*compute_force(pos, bonds, const_bonds, angles,
-                            const_angles, lj, const_lj, molecules, nr_atoms)
+                            const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms)
 
             # if we want to calculate something
             if observable_function:
@@ -113,8 +120,13 @@ def integration(dt, T, file_xyz, file_top, file_out, file_observable,
 
             elif integrator == "vv":
                 pos, update = integrators.integrator_velocity_verlet_pos(pos, v, f, m, dt)
+
+                nl = neighbor_list(pos, m, molecules, r_cut)
+                # This contains the pure atom interactions
+                lj_atoms = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
+
                 f_new = cf*compute_force(pos, bonds, const_bonds, angles,
-                                    const_angles, lj, const_lj, molecules, nr_atoms)
+                                    const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms)
                 v = integrators.integrator_velocity_verlet_vel(v, f, f_new, m, dt)
 
             elif integrator == "v":
@@ -234,7 +246,7 @@ def create_verlet_list(pos, dis_c, dis_s, nr_atoms, box_length):
     return vl
 
 
-def compute_force(pos, bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, nr_atoms):
+def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms):
     """
     Computes the force on each atom, given the position and information from a 
     topology file.
@@ -309,7 +321,7 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj, const_lj, m
     # Forces due to Lennard Jones interaction
     #----------------------------------
     # Difference vectors
-    diff = pos[lj[:,0]] - pos[lj[:,1]]
+    diff = pos[lj_atoms[:,0]] - pos[lj_atoms[:,1]]
     dis = np.linalg.norm(diff, axis=1)
 
     #x1 = np.true_divide(4*const_lj[:,1], dis)
@@ -317,13 +329,14 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj, const_lj, m
 
     # TODO: Fix this, we need derivative not this one!!!
     #   this is energy not force
-    magnitudes = np.multiply(4*const_lj[:,1], np.power(x2, 12) - np.power(x2, 6))
+    temp = np.multiply(np.power(dis, -13), -12*lj_sigma[lj_atoms[:,0], lj_atoms[:,1]]) + 6*np.power(dis, -7)
+    magnitudes = np.multiply(lj_eps[lj_atoms[:,0], lj_atoms[:,1]], temp)
     #print(magnitudes)
     force = magnitudes[:, np.newaxis]*diff
     #print(force)
 
-    np.add.at(force_total, lj[:,0], force)
-    np.add.at(force_total, lj[:,1], -force)
+    np.add.at(force_total, lj_atoms[:,0], force)
+    np.add.at(force_total, lj_atoms[:,1], -force)
 
     #print(force_total)
     return force_total
@@ -350,7 +363,7 @@ if __name__ == "__main__":
     # Water file
     dt = 0.001 # 0.1 ps
     T = 10 # 0.1 ps
-    rcut = 5 # A
+    r_cut = 5 # A
     file_xyz = "data/water_top.xyz"
     file_top = "data/top.itp"
     file_out = "output/result.xyz"
@@ -367,4 +380,4 @@ if __name__ == "__main__":
     # file_observable = "output/result_phase.csv"
     # observable_function = phase_space_h
 
-    integration(dt, T, file_xyz, file_top, file_out, file_observable, observable_function)
+    integration(dt, T, r_cut, file_xyz, file_top, file_out, file_observable, observable_function)
