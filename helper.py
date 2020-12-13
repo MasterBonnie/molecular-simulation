@@ -50,34 +50,42 @@ def atom_string(atom, pos):
     return atom + " " +  np.array2string(pos, separator=" ")[1:-1] + "\n"   
 
 def atom_name_to_mass(atoms):
-    # Not particulary fast, but good enough 
+    """ converts an atom name to its mass"""
     mass = [_atom_mass[atom] for atom in atoms]
     return np.array(mass)
 
-def centreOfMass(pos,m,molecules):
-    M = np.sum(m[molecules], axis = 1)
-    Mpos = np.sum(m[molecules,np.newaxis]*pos[molecules], axis = 1)
-    Cm = Mpos/M[:,np.newaxis]
-    return Cm
-
-# TODO: faster version on stackoverflow? Numba using lists in python?
+# TODO: faster version on stackoverflow? 
 def cartesianprod(x,y):
+    """ returns cartesian product of lists x and y"""
     Cp = np.transpose([np.tile(x, len(y)), np.repeat(y, len(x))])
     return Cp    
 
-def neighbor_list(pos, molecules, centre_of_mass, r_cut, box_size):
+def neighbor_list(pos, molecule_to_atoms, centre_of_mass, r_cut, box_size):
+    """
+    Returns which atoms are close, based on centres of mass that are withtin 
+    r_cut distance of eachother 
+    """
     dis_matrix = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]))
     distance_PBC_matrix(centre_of_mass - centre_of_mass[:, np.newaxis], box_size, dis_matrix)
 
     adj = (0 < dis_matrix) & (dis_matrix < r_cut)
-    return np.transpose(np.nonzero(adj))
+    nl =  np.transpose(np.nonzero(adj))
 
-# TODO: Maybe we can compile this using numba, or even pre-compile this, as we only call it once?
-# Dont know probably doesnt matter
+    if nl.size != 0:
+        lj_atoms = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
+    else:
+        lj_atoms = np.array([])
+
+    return lj_atoms
+
 def create_list(molecules):
     """
     Creates list of what atoms are connected given molecules that are
-    connected
+    connected, i.e. matrix[i][j] is the cartesian product of the atoms 
+    in molecule i and molecule j
+
+    # NOTE: inefficient double loop, but we only call this once so it is
+            not that bad
     """
     matrix = [[0 for j in range(molecules.shape[0])] for i in range(molecules.shape[0])]
 
@@ -88,50 +96,16 @@ def create_list(molecules):
 
     return matrix
 
-@vectorize([float64(float64, float64)],
-            nopython=True, cache=True)
-def project_box(pos, box_size):
-    if pos < 0:
-        pos += box_size
-    elif pos > box_size:
-        pos -= box_size
-    return pos
-
-@jit(nopython=True, cache=True)
-def project_back(molecules, centre_of_mass, pos, box_size):
-    for molecule, i in enumerate(centre_of_mass):
-        translation = np.zeros(3)
-        
-        if molecule[0] < 0:
-            translation[0] = box_size
-        elif molecule[0] > box_size:
-            translation[0] = -box_size
-        if molecule[1] < 0:
-            translation[1] = box_size
-        elif molecule[1] > box_size:
-            translation[1] = -box_size
-        if molecule[2] < 0:
-            translation[2] = box_size
-        elif molecule[2] > box_size:
-            translation[2] = -box_size
-        
-        pos[molecule[i]] += translation
-
-
 @jit(nopython=True, cache=True)
 def norm(x,y,z):
+    """ 2-norm of a vector"""
     return math.sqrt(x*x + y*y + z*z)
-
-@vectorize([float64(float64)],
-            nopython=True, cache=True)
-def abs_vec(number):
-    if number < 0:
-        return -number
-    else:
-        return number
 
 #@jit(nopython=True, cache=True)
 def abs_min(array):
+    """
+    returns minimum of the absolute value of a (x,y,z) triplet
+    """
     res = array[0]
     if abs(res) > abs(array[1]):
         res = array[1]
@@ -140,12 +114,20 @@ def abs_min(array):
 
     return res
 
-@guvectorize([(float64[:,:,:], float64, float64[:,:])], "(n,n,p),()->(n,n)",
-            nopython=True, cache=True)
+#@guvectorize([(float64[:,:,:], float64, float64[:,:])], "(n,n,p),()->(n,n)",
+#            nopython=True, cache=True)
 def distance_PBC_matrix(diff, box_length, res):
     """
-    Function to compute the distance between two positions when considering
+    Function to compute the distance of a matrix of vectors when considering
     periodic boundary conditions
+
+    Input:
+        diff: (n,n,3) numpy array of vectors
+        box_length: length of the PBC box, in A
+        res: (n,n) array which will be filled with the distances
+
+    # TODO: rewrite this back to a numba function (this is also the reason for no return statement)
+    # TODO: combine this with the function below
     """
 
     diff = np.mod(diff, box_length)
@@ -153,17 +135,17 @@ def distance_PBC_matrix(diff, box_length, res):
     for i in range(diff.shape[0]):
         for j in range(diff.shape[0]):
             if j > i:
-                x = min(abs_vec(np.array([diff[i][j][0], 
+                x = abs_min([diff[i][j][0], 
                         diff[i][j][0] + box_length, 
-                        diff[i][j][0] - box_length])))  
+                        diff[i][j][0] - box_length])
 
-                y = min(abs_vec(np.array([diff[i][j][1], 
+                y = abs_min([diff[i][j][1], 
                         diff[i][j][1] + box_length, 
-                        diff[i][j][1] - box_length])))  
+                        diff[i][j][1] - box_length]) 
                 
-                z = min(abs_vec(np.array([diff[i][j][2], 
+                z = abs_min([diff[i][j][2], 
                         diff[i][j][2] + box_length, 
-                        diff[i][j][2] - box_length])))       
+                        diff[i][j][2] - box_length])       
 
                 res[i][j] = norm(x,y,z)
 
@@ -174,6 +156,15 @@ def distance_PBC(pos_1, pos_2, box_length, res, diff):
     """
     Function to compute the distance between two positions when considering
     periodic boundary conditions
+
+    Input:
+        pos_1: array of positions
+        pos_2: array of positions, same length as pos_1
+        box_length: length of the PBC box, in A
+        res: array which will be filled with the distances
+        diff: array which will be filled with the difference vectors
+
+    # TODO: rewrite this back to a numba function (this is also the reason for no return statement)
     """
     pos_1 = np.mod(pos_1, box_length)
     pos_2 = np.mod(pos_2, box_length)
@@ -182,7 +173,7 @@ def distance_PBC(pos_1, pos_2, box_length, res, diff):
         x = abs_min([pos_1[i][0] - pos_2[i][0], 
                 pos_1[i][0]  - pos_2[i][0] + box_length, 
                 pos_1[i][0]  - pos_2[i][0] - box_length])  
-                    
+
         y = abs_min([pos_1[i][1] - pos_2[i][1], 
                 pos_1[i][1]  - pos_2[i][1] + box_length, 
                 pos_1[i][1]  - pos_2[i][1] - box_length]) 
@@ -195,34 +186,4 @@ def distance_PBC(pos_1, pos_2, box_length, res, diff):
         res[i] = norm(x,y,z)
 
 if __name__ == "__main__":
-    box_size = 2.5
-    pos = np.array([[3.,3.,3.],
-                            [1.,1.,1.],
-                            [1.,2.,3.],
-                            [1., 2.4, 3.]])
-    m = np.array([1.,1.,1.,1.])
-
-    # molecules = np.asarray([[0],[1], [2,3]], dtype=np.int)
-    # print(molecules)
-    # com = centreOfMass(test_array, m, molecules)
-
-    # project_back(molecules, com, test_array, box_size)
-
-    dis = np.zeros((2))
-    diff = np.zeros((2,3))
-
-    distance_PBC(pos[[1,2]], pos[[0,3]], box_size, dis, diff)
-
-    test = np.array([-5.2, 1.0, 3.0])
-    t = np.array([2.,2.,2.])
-
-    print(np.true_divide(test,t ))
-
-
-    # print(test_array)
-
-    # diff = test_array[[2,1]] - test_array[[1,1]]
-    # print(diff)
-    # res = np.zeros(diff.shape[0])
-    # distance_PBC(diff, box_size, res)
-    # print(res)
+    pass

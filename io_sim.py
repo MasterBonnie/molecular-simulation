@@ -209,4 +209,3 @@ if __name__ == "__main__":
     lj_atoms = np.concatenate([matrix[i[0]][i[1]] for i in nl])
 
     print(lj_atoms)
-
