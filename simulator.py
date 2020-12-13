@@ -99,12 +99,13 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
             t += dt
 
         # Compute the force on the entire system
+        centres_of_mass = centre_of_mass(pos, m, molecules)
+        lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size)
         f = cf*compute_force(pos, bonds, const_bonds, angles,
                         const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms, box_size)
 
         while t < T:
-            centres_of_mass = centre_of_mass(pos, m, molecules)
-            lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size)
+
 
             # if we want to calculate something
             if observable_function:
@@ -114,6 +115,8 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
             if integrator == "euler":
                 pos, v, _ = integrators.integrator_euler(pos, v, f, m, dt)
 
+                centres_of_mass = centre_of_mass(pos, m, molecules)
+                lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size)
                 f = cf*compute_force(pos, bonds, const_bonds, angles,
                             const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms, box_size)
 
@@ -132,6 +135,8 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
                 # This v is the velocity at the previous timestep
                 v = integrators.integrator_verlet_vel(pos, pos_old, dt) 
 
+                centres_of_mass = centre_of_mass(pos, m, molecules)
+                lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size)
                 f = cf*compute_force(pos, bonds, const_bonds, angles,
                         const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms, box_size)
             
