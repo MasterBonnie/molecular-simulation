@@ -1,12 +1,13 @@
 import numpy as np
 import math
 from collections import deque
+from numba import vectorize, float64, jit, guvectorize
 
 import io_sim
-from helper import atom_string, random_unit_vector, unit_vector, angle_between, atom_name_to_mass
+from helper import atom_string, random_unit_vector, unit_vector, angle_between, atom_name_to_mass, centreOfMass, cartesianprod, create_list, neighbor_list, project_box, distance_PBC
 import integrators
 
-def integration(dt, T, r_cut, file_xyz, file_top, file_out, file_observable, 
+def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, 
                 observable_function = None, integrator="vv", write_output = True):
     """
     Numerical integration using either the euler algorithm,
@@ -44,8 +45,12 @@ def integration(dt, T, r_cut, file_xyz, file_top, file_out, file_observable,
     # Get all external variables
     pos, atoms, nr_atoms = io_sim.read_xyz(file_xyz)
     bonds, const_bonds, angles, const_angles, lj, const_lj, molecules = io_sim.read_topology(file_top)
+
     # Mass is given in amu
     m = atom_name_to_mass(atoms)
+
+    # Make sure pos is valid 
+    pos = project_box(pos, box_size)
 
     # Pre-calculate these, because we need them all anyway, probably
     lj_sigma = np.zeros(nr_atoms)
@@ -80,13 +85,17 @@ def integration(dt, T, r_cut, file_xyz, file_top, file_out, file_observable,
         # Euler algorithm at first. It is easier to do this outside
         # the while loop
         if integrator == "v":
+            pos = project_box(pos, box_size)
             nl = neighbor_list(pos, m, molecules, r_cut)
             # This contains the pure atom interactions
-            lj_atoms = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
+            if nl.size != 0:
+                lj_atoms = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
+            else:
+                lj_atoms = np.array([])
 
             pos_old = pos
             f = cf*compute_force(pos, bonds, const_bonds, angles,
-                            const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms)
+                            const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms, box_size)
 
             # If we want to calculate something
             if observable_function:
@@ -97,18 +106,22 @@ def integration(dt, T, r_cut, file_xyz, file_top, file_out, file_observable,
             t += dt
 
         while t < T:
-
             # Then we compute the neighbor list
             # This list contains arrays of the form
             # [i,j], which are molecules which need a Lennard Jones 
             # interaction
+            # TODO: This can fail if the list becomes empty!!!!
+            # concatenate will throw error
             nl = neighbor_list(pos, m, molecules, r_cut)
             # This contains the pure atom interactions
-            lj_atoms = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
+            if nl.size != 0:
+                lj_atoms = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
+            else:
+                lj_atoms = np.array([])
 
             # Compute the force on the entire system
             f = cf*compute_force(pos, bonds, const_bonds, angles,
-                            const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms)
+                            const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms, box_size)
 
             # if we want to calculate something
             if observable_function:
@@ -121,12 +134,16 @@ def integration(dt, T, r_cut, file_xyz, file_top, file_out, file_observable,
             elif integrator == "vv":
                 pos, update = integrators.integrator_velocity_verlet_pos(pos, v, f, m, dt)
 
+                pos = project_box(pos, box_size)
                 nl = neighbor_list(pos, m, molecules, r_cut)
                 # This contains the pure atom interactions
-                lj_atoms = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
+                if nl.size != 0:
+                    lj_atoms = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
+                else:
+                    lj_atoms = np.array([])
 
                 f_new = cf*compute_force(pos, bonds, const_bonds, angles,
-                                    const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms)
+                                    const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms, box_size)
                 v = integrators.integrator_velocity_verlet_vel(v, f, f_new, m, dt)
 
             elif integrator == "v":
@@ -151,102 +168,10 @@ def integration(dt, T, r_cut, file_xyz, file_top, file_out, file_observable,
 
     return
 
-def centreOfMass(pos,m,molecules):
-    M = np.sum(m[molecules], axis = 1)
-    Mpos = np.sum(m[molecules,np.newaxis]*pos[molecules], axis = 1)
-    Cm = Mpos/M[:,np.newaxis]
-    return Cm
- 
-# TODO: faster version on stackoverflow? Numba using lists in python?
-def cartesianprod(x,y):
-    Cp = np.transpose([np.tile(x, len(y)), np.repeat(y, len(x))])
-    return Cp    
-
-def update_displacement(displacement, update):
-    displacement += update    
-    distances = np.linalg.norm(displacement, axis=1)
-    distances = np.sort(distances)
-    return distances[-1] + distances[-2]
-
-def neighbor_list(pos, m, molecules, r_cut):
-    pos_matrix = centreOfMass(pos, m, molecules)
-    dis_matrix = np.linalg.norm(pos_matrix - pos_matrix[:, np.newaxis], axis = 2)
-    adj = (0 < dis_matrix) & (dis_matrix < r_cut)
-    # TODO: maybe this can be done better?
-    # Prevents the dubble pairs to appear
-    iu1 = np.tril_indices(adj.shape[0])
-    adj[iu1] = 0
-    return np.transpose(np.nonzero(adj))
-
-# Maybe we can compile this using numba, or even pre-compile this, as we only call it once
-def create_list(molecules):
-    """
-    Creates list of what atoms are connected given molecules that are
-    connected
-    """
-    matrix = [[0 for j in range(molecules.shape[0])] for i in range(molecules.shape[0])]
-
-    for i in range(molecules.shape[0]):
-        for j in range(molecules.shape[0]):
-            if j > i:
-                matrix[i][j] = cartesianprod(molecules[i], molecules[j])
-
-    return matrix
-
-#@jit
-def norm(x,y,z):
-    return math.sqrt(x*x + y*y + z*z)
-
-#@jit
-def compute_distance_PBC(pos_1, pos_2, box_length):
-    """
-    Function to compute the distance between two positions when considering
-    periodic boundary conditions
-    """
-    res = np.zeros(pos_1.shape[0])
-
-    for i in range(pos_1.shape[0]):
-        x = min([pos_1[i][0] - pos_2[i][0], 
-                 pos_1[i][0] - pos_2[i][0] + box_length, 
-                 pos_1[i][0] - pos_2[i][0] - box_length])   
-
-        y = min([pos_1[i][1] - pos_2[i][1], 
-                 pos_1[i][1] - pos_2[i][1] + box_length, 
-                 pos_1[i][1] - pos_2[i][1] - box_length])        
-
-        z = min([pos_1[i][2] - pos_2[i][2], 
-                 pos_1[i][2] - pos_2[i][2] + box_length, 
-                 pos_1[i][2] - pos_2[i][2] - box_length])        
-        
-        res[i] = norm(x,y,z)
-
-    return res
-
-def create_verlet_list(pos, dis_c, dis_s, nr_atoms, box_length):
-    """
-    Function to create verlet list given positions
-    """
-    vl = []
-    vl.append(0)
-    # For every atom:
-    start_list = 0
-    for i in range(pos.shape[0]):
-        nneighbors = 0
-        for j in range(pos.shape[0]):
-            if i == j:
-                continue
-            dis = compute_distance_PBC(pos[i], pos[j], box_length)
-
-            if (dis < dis_s):
-                nneighbors += 1
-                vl.append(j)
-            vl[start_list] = nneighbors
-            start_list = nneighbors + 1
-
-    return vl
 
 
-def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms):
+def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms,
+                    box_size):
     """
     Computes the force on each atom, given the position and information from a 
     topology file.
@@ -272,7 +197,8 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     # Difference vectors for the bonds, and the
     # distance between these atoms
     diff = pos[bonds[:,0]] - pos[bonds[:,1]]
-    dis = np.linalg.norm(diff, axis=1)
+    dis = np.zeros(diff.shape[0])
+    dis = distance_PBC(diff, box_size, dis)
 
     # Calculate the forces between the atoms
     magnitudes = np.multiply(-const_bonds[:,0], dis - const_bonds[:,1])
@@ -296,7 +222,12 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     # with the differences calculated for the bonds,
     # to avoid calculating some twice
     diff_1 = pos[angles[:,1]] - pos[angles[:,0]]
+    dis_1 = np.zeros(diff_1.shape[0])
+    distance_PBC(diff_1, box_size, dis_1)
+
     diff_2 = pos[angles[:,1]] - pos[angles[:,2]]
+    dis_2 = np.zeros(diff_2.shape[0])
+    distance_PBC(diff_2, box_size, dis_2)
 
     ang = angle_between(diff_1, diff_2)
     
@@ -309,8 +240,8 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     angular_force_unit_2 = -unit_vector(np.cross(np.cross(diff_1, diff_2), diff_2))
 
     # Actually calculate the forces
-    force_ang_1 = np.multiply(np.true_divide(mag_ang, np.linalg.norm(diff_1, axis=1))[:, np.newaxis], angular_force_unit_1)
-    force_ang_2 = np.multiply(np.true_divide(mag_ang, np.linalg.norm(diff_2, axis=1))[:, np.newaxis], angular_force_unit_2)
+    force_ang_1 = np.multiply(np.true_divide(mag_ang, dis_1)[:, np.newaxis], angular_force_unit_1)
+    force_ang_2 = np.multiply(np.true_divide(mag_ang, dis_2)[:, np.newaxis], angular_force_unit_2)
     
     # Add them to the total force
     np.add.at(force_total, angles[:,0], force_ang_1)
@@ -321,22 +252,22 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     # Forces due to Lennard Jones interaction
     #----------------------------------
     # Difference vectors
-    diff = pos[lj_atoms[:,0]] - pos[lj_atoms[:,1]]
-    dis = np.linalg.norm(diff, axis=1)
+    if lj_atoms.shape[0] != 0:
+        diff = pos[lj_atoms[:,0]] - pos[lj_atoms[:,1]]
+        dis = np.zeros(diff.shape[0])
+        distance_PBC(diff, box_size, dis)
 
-    #x1 = np.true_divide(4*const_lj[:,1], dis)
-    #x2 = np.true_divide(const_lj[:,0], dis)
+        #x1 = np.true_divide(4*const_lj[:,1], dis)
+        #x2 = np.true_divide(const_lj[:,0], dis)
 
-    # TODO: Fix this, we need derivative not this one!!!
-    #   this is energy not force
-    temp = np.multiply(np.power(dis, -13), -12*lj_sigma[lj_atoms[:,0], lj_atoms[:,1]]) + 6*np.power(dis, -7)
-    magnitudes = np.multiply(lj_eps[lj_atoms[:,0], lj_atoms[:,1]], temp)
-    #print(magnitudes)
-    force = magnitudes[:, np.newaxis]*diff
-    #print(force)
+        temp = np.multiply(np.power(dis, -13), -12*lj_sigma[lj_atoms[:,0], lj_atoms[:,1]]) + 6*np.power(dis, -7)
+        magnitudes = np.multiply(lj_eps[lj_atoms[:,0], lj_atoms[:,1]], temp)
+        #print(magnitudes)
+        force = magnitudes[:, np.newaxis]*diff
+        #print(force)
 
-    np.add.at(force_total, lj_atoms[:,0], force)
-    np.add.at(force_total, lj_atoms[:,1], -force)
+        np.add.at(force_total, lj_atoms[:,0], force)
+        np.add.at(force_total, lj_atoms[:,1], -force)
 
     #print(force_total)
     return force_total
@@ -362,8 +293,9 @@ if __name__ == "__main__":
 
     # Water file
     dt = 0.001 # 0.1 ps
-    T = 10 # 0.1 ps
+    T = 0.1 # 0.1 ps
     r_cut = 5 # A
+    box_size = 7 # A
     file_xyz = "data/water_top.xyz"
     file_top = "data/top.itp"
     file_out = "output/result.xyz"
@@ -380,4 +312,4 @@ if __name__ == "__main__":
     # file_observable = "output/result_phase.csv"
     # observable_function = phase_space_h
 
-    integration(dt, T, r_cut, file_xyz, file_top, file_out, file_observable, observable_function)
+    integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, observable_function)
