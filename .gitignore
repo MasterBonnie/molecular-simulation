@@ -138,3 +138,6 @@ output/
 
 # Report
 *.pdf
+
+#
+old_code.py
