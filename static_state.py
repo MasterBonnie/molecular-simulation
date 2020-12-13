@@ -1,6 +1,6 @@
 import numpy as np
 from numba import vectorize, float64, jit, guvectorize
-from helper import atom_string, random_unit_vector, unit_vector, angle_between, atom_name_to_mass, centreOfMass, cartesianprod, create_list, neighbor_list, project_box, distance_PBC
+from helper import unit_vector, angle_between, distance_PBC
 
 
 """File for extracting/calculating information about a state at a particular time step"""
@@ -85,8 +85,9 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
 
     # Calculate the direction vectors for the forces 
     # TODO: does cross return a unit vector already?
-    angular_force_unit_1 = unit_vector(np.cross(np.cross(diff_1, diff_2), diff_1))
-    angular_force_unit_2 = -unit_vector(np.cross(np.cross(diff_1, diff_2), diff_2))
+    cross_vector = np.cross(diff_1, diff_2)
+    angular_force_unit_1 = unit_vector(np.cross(cross_vector, diff_1))
+    angular_force_unit_2 = -unit_vector(np.cross(cross_vector, diff_2))
 
     # Actually calculate the forces
     force_ang_1 = np.multiply(np.true_divide(mag_ang, dis_1)[:, np.newaxis], angular_force_unit_1)
@@ -100,7 +101,7 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     #----------------------------------
     # Forces due to Lennard Jones interaction
     #----------------------------------
-    # Difference vectors
+    # if lj_atoms is not empty
     if lj_atoms.shape[0] != 0:
         diff = np.zeros((lj_atoms.shape[0], 3))
         dis = np.zeros(diff.shape[0])
