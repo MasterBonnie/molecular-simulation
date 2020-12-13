@@ -17,6 +17,8 @@ def angle_between(v1, v2):
     """
     # Calculates the row-wise dot product between
     # diff_1 and diff_2
+    v1 = unit_vector(v1)
+    v2 = unit_vector(v2)
     dot = np.einsum('ij,ij->i', v1, v2)
 
     # We then get the angle from this
