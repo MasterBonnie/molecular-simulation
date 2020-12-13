@@ -6,6 +6,7 @@ from numba import vectorize, float64, jit, guvectorize
 import io_sim
 from helper import atom_string, random_unit_vector, unit_vector, angle_between, atom_name_to_mass, centreOfMass, cartesianprod, create_list, neighbor_list, project_box, distance_PBC
 import integrators
+from static_state import centre_of_mass, project_to_box
 
 def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, 
                 observable_function = None, integrator="vv", write_output = True):
@@ -50,13 +51,14 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
     m = atom_name_to_mass(atoms)
 
     # Make sure pos is valid 
-    pos = project_box(pos, box_size)
+    # centres_of_mass = centre_of_mass(pos, m, molecules)
+    # project_to_box(molecules, centres_of_mass, pos, box_size)
 
     # Pre-calculate these, because we need them all anyway, probably
     lj_sigma = np.zeros(nr_atoms)
     lj_sigma[lj] = const_lj[:,0]
     lj_sigma = 0.5*(lj_sigma + lj_sigma[:, np.newaxis])
-    lj_sigma = np.power(lj_sigma, 6)
+    #lj_sigma = np.power(lj_sigma, 6)
 
     # NOTE: multiply with 4 here already
     lj_eps = np.zeros(nr_atoms)
@@ -68,7 +70,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
     molecule_to_atoms = create_list(molecules)
 
     # Random initial velocity
-    v = 1*unit_vector(np.random.uniform(size=[nr_atoms,3]))
+    v = 5*unit_vector(np.random.uniform(size=[nr_atoms,3]))
 
     # Open the output file
     # I dont think it matters too much to have these files open during the calculation
@@ -85,8 +87,8 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
         # Euler algorithm at first. It is easier to do this outside
         # the while loop
         if integrator == "v":
-            pos = project_box(pos, box_size)
-            nl = neighbor_list(pos, m, molecules, r_cut)
+            centres_of_mass = centre_of_mass(pos, m, molecules)
+            nl = neighbor_list(pos, molecules, centres_of_mass, r_cut, box_size)
             # This contains the pure atom interactions
             if nl.size != 0:
                 lj_atoms = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
@@ -112,7 +114,10 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
             # interaction
             # TODO: This can fail if the list becomes empty!!!!
             # concatenate will throw error
-            nl = neighbor_list(pos, m, molecules, r_cut)
+            centres_of_mass = centre_of_mass(pos, m, molecules)
+            #print(centres_of_mass)
+            #project_to_box(molecules, centres_of_mass, pos, box_size)
+            nl = neighbor_list(pos, molecules, centres_of_mass, r_cut, box_size)
             # This contains the pure atom interactions
             if nl.size != 0:
                 lj_atoms = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
@@ -134,8 +139,10 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
             elif integrator == "vv":
                 pos, update = integrators.integrator_velocity_verlet_pos(pos, v, f, m, dt)
 
-                pos = project_box(pos, box_size)
-                nl = neighbor_list(pos, m, molecules, r_cut)
+                centres_of_mass = centre_of_mass(pos, m, molecules)
+                #print(centres_of_mass)
+                #project_to_box(molecules, centres_of_mass, pos, box_size)
+                nl = neighbor_list(pos, molecules, centres_of_mass, r_cut, box_size)
                 # This contains the pure atom interactions
                 if nl.size != 0:
                     lj_atoms = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
@@ -163,7 +170,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
                 output_file.write(f"{nr_atoms}" + '\n')
                 output_file.write("Comments" + '\n')
 
-                for atom_name, atom in enumerate(pos):
+                for atom_name, atom in enumerate(np.mod(pos, box_size)):
                     output_file.write(atom_string(atoms[atom_name], atom))
 
     return
@@ -197,13 +204,12 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     # Difference vectors for the bonds, and the
     # distance between these atoms
     diff = pos[bonds[:,0]] - pos[bonds[:,1]]
-    dis = np.zeros(diff.shape[0])
-    dis = distance_PBC(diff, box_size, dis)
+    dis = np.linalg.norm(diff, axis=1)
 
     # Calculate the forces between the atoms
     magnitudes = np.multiply(-const_bonds[:,0], dis - const_bonds[:,1])
     force = magnitudes[:, np.newaxis]*unit_vector(diff)
-
+    
     # Add them to the total force
     np.add.at(force_total, bonds[:,0], force)
     np.add.at(force_total, bonds[:,1], -force)
@@ -222,13 +228,9 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     # with the differences calculated for the bonds,
     # to avoid calculating some twice
     diff_1 = pos[angles[:,1]] - pos[angles[:,0]]
-    dis_1 = np.zeros(diff_1.shape[0])
-    distance_PBC(diff_1, box_size, dis_1)
-
+    dis_1 = np.linalg.norm(diff_1, axis=1)
     diff_2 = pos[angles[:,1]] - pos[angles[:,2]]
-    dis_2 = np.zeros(diff_2.shape[0])
-    distance_PBC(diff_2, box_size, dis_2)
-
+    dis_2 = np.linalg.norm(diff_2, axis=1)
     ang = angle_between(diff_1, diff_2)
     
     # The constant we need for the force calculation
@@ -253,22 +255,36 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     #----------------------------------
     # Difference vectors
     if lj_atoms.shape[0] != 0:
-        diff = pos[lj_atoms[:,0]] - pos[lj_atoms[:,1]]
+        diff = np.zeros((lj_atoms.shape[0], 3))
         dis = np.zeros(diff.shape[0])
-        distance_PBC(diff, box_size, dis)
+        distance_PBC(pos[lj_atoms[:,0]], pos[lj_atoms[:,1]],  box_size, dis, diff)
+        print("diff")
+        print(diff)
+        print("dis")
+        print(dis)
+        #print(lj_atoms)
+        #print(diff)
+        #print(dis)
 
         #x1 = np.true_divide(4*const_lj[:,1], dis)
         #x2 = np.true_divide(const_lj[:,0], dis)
 
-        temp = np.multiply(np.power(dis, -13), -12*lj_sigma[lj_atoms[:,0], lj_atoms[:,1]]) + 6*np.power(dis, -7)
-        magnitudes = np.multiply(lj_eps[lj_atoms[:,0], lj_atoms[:,1]], temp)
+        term = np.true_divide(lj_sigma[lj_atoms[:,0], lj_atoms[:,1]], dis)
+        print(term)
+        term_1 = 2*np.power(term, 12)
+        term_2 = -1*np.power(term, 6)
+
+        magnitudes = 6*np.multiply(np.true_divide(lj_eps[lj_atoms[:,0], lj_atoms[:,1]], dis), term_1 + term_2)
         #print(magnitudes)
-        force = magnitudes[:, np.newaxis]*diff
+        force = magnitudes[:, np.newaxis]*unit_vector(diff)
         #print(force)
 
         np.add.at(force_total, lj_atoms[:,0], force)
         np.add.at(force_total, lj_atoms[:,1], -force)
+        print(magnitudes)
 
+    #print(force_total)
+    #print(force_total)
     #print(force_total)
     return force_total
 
@@ -293,9 +309,9 @@ if __name__ == "__main__":
 
     # Water file
     dt = 0.001 # 0.1 ps
-    T = 0.1 # 0.1 ps
-    r_cut = 5 # A
-    box_size = 7 # A
+    T = 10  # 0.1 ps
+    r_cut = 3 # A
+    box_size = 8 # A
     file_xyz = "data/water_top.xyz"
     file_top = "data/top.itp"
     file_out = "output/result.xyz"

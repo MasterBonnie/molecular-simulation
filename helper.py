@@ -24,8 +24,9 @@ def angle_between(v1, v2):
     """
     # Calculates the row-wise dot product between
     # diff_1 and diff_2
+    v1 = unit_vector(v1)
+    v2 = unit_vector(v2)
     dot = np.einsum('ij,ij->i', v1, v2)
-    print(dot)
 
     # We then get the angle from this
     ang = np.arccos(dot)
@@ -64,7 +65,7 @@ def cartesianprod(x,y):
     Cp = np.transpose([np.tile(x, len(y)), np.repeat(y, len(x))])
     return Cp    
 
-def neighbor_list(pos, molecules, centre_of_mass, r_cut):
+def neighbor_list(pos, molecules, centre_of_mass, r_cut, box_size):
     dis_matrix = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]))
     distance_PBC_matrix(centre_of_mass - centre_of_mass[:, np.newaxis], box_size, dis_matrix)
 
@@ -129,6 +130,16 @@ def abs_vec(number):
     else:
         return number
 
+#@jit(nopython=True, cache=True)
+def abs_min(array):
+    res = array[0]
+    if abs(res) > abs(array[1]):
+        res = array[1]
+    if abs(res) > abs(array[2]):
+        res = array[2]
+
+    return res
+
 @guvectorize([(float64[:,:,:], float64, float64[:,:])], "(n,n,p),()->(n,n)",
             nopython=True, cache=True)
 def distance_PBC_matrix(diff, box_length, res):
@@ -136,6 +147,8 @@ def distance_PBC_matrix(diff, box_length, res):
     Function to compute the distance between two positions when considering
     periodic boundary conditions
     """
+
+    diff = np.mod(diff, box_length)
 
     for i in range(diff.shape[0]):
         for j in range(diff.shape[0]):
@@ -155,45 +168,55 @@ def distance_PBC_matrix(diff, box_length, res):
                 res[i][j] = norm(x,y,z)
 
 
-@guvectorize([(float64[:,:], float64, float64[:])], "(n,p),()->(n)",
-            nopython=True, cache=True)
-def distance_PBC(diff, box_length, res):
+#@guvectorize([(float64[:,:], float64[:,:], float64, float64[:], float64[:,:])], "(n,p),(n,p),()->(n),(n,p)",
+#            nopython=True, cache=True)
+def distance_PBC(pos_1, pos_2, box_length, res, diff):
     """
     Function to compute the distance between two positions when considering
     periodic boundary conditions
     """
+    pos_1 = np.mod(pos_1, box_length)
+    pos_2 = np.mod(pos_2, box_length)
 
     for i in range(diff.shape[0]):
-        x = min(abs_vec(np.array([diff[i][0], 
-                diff[i][0] + box_length, 
-                diff[i][0] - box_length])))  
-
-        y = min(abs_vec(np.array([diff[i][1], 
-                diff[i][1] + box_length, 
-                diff[i][1] - box_length])))  
+        x = abs_min([pos_1[i][0] - pos_2[i][0], 
+                pos_1[i][0]  - pos_2[i][0] + box_length, 
+                pos_1[i][0]  - pos_2[i][0] - box_length])  
+                    
+        y = abs_min([pos_1[i][1] - pos_2[i][1], 
+                pos_1[i][1]  - pos_2[i][1] + box_length, 
+                pos_1[i][1]  - pos_2[i][1] - box_length]) 
         
-        z = min(abs_vec(np.array([diff[i][2], 
-                diff[i][2] + box_length, 
-                diff[i][2] - box_length])))       
-
+        z = abs_min([pos_1[i][2] - pos_2[i][2], 
+                pos_1[i][2]  - pos_2[i][2] + box_length, 
+                pos_1[i][2]  - pos_2[i][2] - box_length])        
+        
+        diff[i] = np.array([x,y,z])
         res[i] = norm(x,y,z)
 
 if __name__ == "__main__":
     box_size = 2.5
-    test_array = np.array([[3.,3.,3.],
+    pos = np.array([[3.,3.,3.],
                             [1.,1.,1.],
                             [1.,2.,3.],
                             [1., 2.4, 3.]])
     m = np.array([1.,1.,1.,1.])
 
-    molecules = np.asarray([[0],[1], [2,3]], dtype=np.int)
-    print(molecules)
-    com = centreOfMass(test_array, m, molecules)
+    # molecules = np.asarray([[0],[1], [2,3]], dtype=np.int)
+    # print(molecules)
+    # com = centreOfMass(test_array, m, molecules)
 
-    project_back(molecules, com, test_array, box_size)
+    # project_back(molecules, com, test_array, box_size)
 
+    dis = np.zeros((2))
+    diff = np.zeros((2,3))
 
-    print(test_array)
+    distance_PBC(pos[[1,2]], pos[[0,3]], box_size, dis, diff)
+
+    test = np.array([-5.2, 1.0, 3.0])
+    t = np.array([2.,2.,2.])
+
+    print(np.true_divide(test,t ))
 
 
     # print(test_array)
