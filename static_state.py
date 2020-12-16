@@ -1,5 +1,5 @@
 import numpy as np
-from numba import vectorize, float64, jit, guvectorize
+from numba import vectorize, float64, jit, guvectorize, double
 from helper import unit_vector, angle_between, distance_PBC
 
 
@@ -27,6 +27,25 @@ def centre_of_mass(pos, m, molecules):
         centre_of_mass[i] = Mpos/M
 
     return centre_of_mass
+
+
+#https://gist.github.com/ufechner7/98bcd6d9915ff4660a10
+@jit
+def cross(vec1, vec2):
+    """ Calculate the cross product of two 3d vectors. """
+    result = np.zeros((vec1.shape[0],3))
+    return cross_(vec1, vec2, result)
+
+@jit(nopython=True)
+def cross_(vec1, vec2, result):
+    """ Calculate the cross product of array of 3d vectors. """
+    for i in range(vec1.shape[0]):
+        a1, a2, a3 = double(vec1[i][0]), double(vec1[i][1]), double(vec1[i][2])
+        b1, b2, b3 = double(vec2[i][0]), double(vec2[i][1]), double(vec2[i][2])
+        result[i][0] = a2 * b3 - a3 * b2
+        result[i][1] = a3 * b1 - a1 * b3
+        result[i][2] = a1 * b2 - a2 * b1
+    return result
 
 def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms,
                     box_size):
@@ -85,9 +104,9 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
 
     # Calculate the direction vectors for the forces 
     # TODO: does cross return a unit vector already?
-    cross_vector = np.cross(diff_1, diff_2)
-    angular_force_unit_1 = unit_vector(np.cross(cross_vector, diff_1))
-    angular_force_unit_2 = -unit_vector(np.cross(cross_vector, diff_2))
+    cross_vector = cross(diff_1, diff_2)
+    angular_force_unit_1 = unit_vector(cross(cross_vector, diff_1))
+    angular_force_unit_2 = -unit_vector(cross(cross_vector, diff_2))
 
     # Actually calculate the forces
     force_ang_1 = np.multiply(np.true_divide(mag_ang, dis_1)[:, np.newaxis], angular_force_unit_1)
@@ -119,6 +138,36 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
 
     return force_total
 
+    
+
+#@guvectorize([(float64[:,:], float64, float64[:,:])], "(n,p), ()->(n,p)",
+#            nopython=True, cache=True)
+def calculate_displacement(centres_of_mass, box_size, res):
+    for i in range(centres_of_mass.shape[0]):
+        for j in range(3):
+            if centres_of_mass[i][j] < 0:
+                res[i][j] = box_size
+            elif centres_of_mass[i][j] > box_size:
+                res[i][j] = - box_size
+
+#@jit(nopython=True, cache=True)
+def project_pos(centres_of_mass, box_size, pos, molecules):
+    
+    displacement = np.zeros(centres_of_mass.shape)
+    calculate_displacement(centres_of_mass, box_size, displacement)
+
+    for i, molecule in enumerate(molecules):
+        pos[molecule] += displacement[i]
+
 if __name__ == "__main__":
-    pass
+    pos = np.array([[1.,1.,1.],
+                     [2.5, 1.9, 1.9],
+                     [1.9, 1.9, 1.9]])
+    molecules = [[0], [1,2]]
+    m = np.array([1.,1.,1.])
+    box_size = 2
+    com = centre_of_mass(pos, m, molecules)
+    calculate_displacement(com, box_size, np.zeros(com.shape))
+    project_pos(com, box_size, pos, molecules)
+    
 

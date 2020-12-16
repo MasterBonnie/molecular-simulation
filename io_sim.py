@@ -160,52 +160,207 @@ def read_json(input):
 
     return data
 
-
-# Maybe we can compile this using numba, or even pre-compile this, as we only call it once
-def create_list(molecules):
+def printProgressBar(iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
     """
-    Creates list of what atoms are connected given molecules that are
-    connected
+    https://stackoverflow.com/questions/3173320/text-progress-bar-in-the-console
+    Call in a loop to create terminal progress bar
+    @params:
+        iteration   - Required  : current iteration (Int)
+        total       - Required  : total iterations (Int)
+        prefix      - Optional  : prefix string (Str)
+        suffix      - Optional  : suffix string (Str)
+        decimals    - Optional  : positive number of decimals in percent complete (Int)
+        length      - Optional  : character length of bar (Int)
+        fill        - Optional  : bar fill character (Str)
+        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
     """
-    matrix = [[0 for j in range(molecules.shape[0])] for i in range(molecules.shape[0])]
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filledLength = int(length * iteration // total)
+    bar = fill * filledLength + '-' * (length - filledLength)
+    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+    # Print New Line on Complete
+    if iteration == total: 
+        print()
 
-    for i in range(molecules.shape[0]):
-        for j in range(molecules.shape[0]):
-            if j > i:
-                matrix[i][j] = cartesianprod(molecules[i], molecules[j])
+_water_patern = np.array([
+                          [1.93617934,      2.31884508,      1.72261570],
+                          [1.78931374,      3.24075634,      1.51114298],
+                          [2.30448689,      1.98045541,      0.90160232]
+                           ])
 
-    return matrix
+_water_atoms = ["O", "H", "H"]
 
-def neighbor_list(pos, m, molecules, r_cut):
-    pos_matrix = centreOfMass(pos, m, molecules)
-    dis_matrix = np.linalg.norm(pos_matrix - pos_matrix[:, np.newaxis], axis = 2)
-    adj = (0 < dis_matrix) & (dis_matrix < r_cut)
-    # TODO: maybe this can be done better?
-    iu1 = np.tril_indices(adj.shape[0])
-    adj[iu1] = 0
-    return np.transpose(np.nonzero(adj))
+_ethanol_patern = np.array([
+                        [0.826028, -0.40038, -0.826028],
+                        [1.42445, -1.03723, -0.171629],
+                        [1.49617, 0.1448, -1.49617],
+                        [0.171629, -1.03723, -1.42445],
+                        [0.0, 0.55946, 0.0],
+                        [-0.597, 1.20751, -0.657249],
+                        [0.657249, 1.20751, 0.59706],
+                        [-0.841514, -0.22767, 0.841514],
+                        [-1.37647, 0.38153, 1.37647]
+                            ])
 
-def cartesianprod(x,y):
-    Cp = np.transpose([np.tile(x, len(y)), np.repeat(y, len(x))])
-    return Cp   
+_ethanol_atoms = ["C","H","H","H","C","H","H","O","H"]
 
-def centreOfMass(pos,m,molecules):
-    M = np.sum(m[molecules], axis = 1)
-    Mpos = np.sum(m[molecules,np.newaxis]*pos[molecules], axis = 1)
-    Cm = Mpos/M[:,np.newaxis]
-    return Cm
+def create_dataset(nr_h20, nr_ethanol, box_size, output_file_xyz, output_file_top):
+    """ 
+    Creates a dataset with nr_h20 water molecules and nr_ethanol ethanol molecules
+    Randomly placed inside a box of size box_size.
+    Writes to output_file_xyz and output_file_top
+    """
+    with open(output_file_xyz, "w") as xyz_file, open(output_file_top, "w") as top_file:
+        xyz_file.write(f"{3*nr_h20 + 9*nr_ethanol} \n")
+        xyz_file.write(f"{nr_h20} water molecules and {nr_ethanol} ethanol molecules \n")
+
+        bonds = []
+        angles = []
+        LJ = []
+        molecules = []
+
+        pos = []
+
+        for i in range(nr_h20):
+            random_displacement = np.random.uniform(0, box_size, (3))
+            water = np.asarray([_water_patern[0] + random_displacement,
+                               _water_patern[1] + random_displacement,
+                               _water_patern[2] + random_displacement]) 
+
+            com = (15.999*water[0] + water[1] + water[2])/16.
+
+            while check_placement(com, pos, box_size):
+                random_displacement = np.random.uniform(0, box_size, (3))
+                water = np.asarray([_water_patern[0] + random_displacement,
+                               _water_patern[1] + random_displacement,
+                               _water_patern[2] + random_displacement]) 
+
+                com = (15.999*water[0] + water[1] + water[2])/16.
+
+            pos.append(com)
+
+            for j, atom in enumerate(_water_atoms):
+                xyz_file.write(helper.atom_string(atom, water[j]))
+
+
+            bonds.append(f"{3*i} {3*i+1} 5024.16 0.9572 \n")
+            bonds.append(f"{3*i} {3*i+2} 5024.16 0.9572 \n")
+
+            angles.append(f"{3*i+1} {3*i} {3*i+2} 628.02 1.8242181 \n")
+
+            LJ.append(f"{3*i} 3.15061 0.66386 \n")
+
+            molecules.append(f"{3*i} {3*i+1} {3*i+2} \n")
+
+        for i in range(nr_ethanol):
+            random_displacement = np.random.uniform(0, box_size, (3))
+            ethanol = np.asarray([_ethanol_patern[i] + random_displacement for i in range(9)])
+
+            m = helper.atom_name_to_mass(_ethanol_atoms)
+
+            com = np.sum(np.array([m[i]*ethanol[i] for i in range(9)]), axis=1)/np.sum(m)
+
+            while check_placement(com, pos, box_size):
+                random_displacement = np.random.uniform(0, box_size, (3))
+                ethanol = np.asarray([_ethanol_patern[i] + random_displacement for i in range(9)])
+                com = np.sum(np.array([m[i]*ethanol[i] for i in range(9)]), axis = 1)/np.sum(m)
+
+            pos.append(com)
+
+            for j, atom in enumerate(_ethanol_atoms):
+                xyz_file.write(helper.atom_string(atom, ethanol[j]))
+
+            # Correctly offset counter
+
+            bonds.append(f"{9*i + 3*nr_h20} {9*i + 1 + 3*nr_h20} 2845.12 1.09 \n")
+            bonds.append(f"{9*i + 3*nr_h20} {9*i + 2 + 3*nr_h20} 2845.12 1.09 \n")
+            bonds.append(f"{9*i + 3*nr_h20} {9*i + 3 + 3*nr_h20} 2845.12 1.09 \n")
+            bonds.append(f"{9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 2845.12 1.09 \n")
+            bonds.append(f"{9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 2845.12 1.09 \n")
+
+            bonds.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} 2242.624 1.529 \n")
+
+            bonds.append(f"{9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 2677.76 1.41 \n")
+
+            bonds.append(f"{9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 4626.50 0.945  \n")
+
+            angles.append(f"{9*i + 1 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} 292.88 1.8937 \n")
+            angles.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} 292.88 1.8937 \n")
+            angles.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} 292.88 1.8937 \n")
+
+            angles.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 2 + 3*nr_h20} 276.144 1.8815 \n")
+            angles.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 1 + 3*nr_h20} 276.144 1.8815 \n")
+            angles.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 1 + 3*nr_h20} 276.144 1.8815 \n")
+            angles.append(f"{9*i + 5 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 276.144 1.8815 \n")
+
+            angles.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 313.8 1.9321 \n")
+            angles.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 313.8 1.9321 \n")
+
+            angles.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 414.4 1.9111 \n")
+
+            angles.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 460.24 1.8937 \n")
+
+            angles.append(f"{9*i + 5 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 292.88 1.9111 \n")
+            angles.append(f"{9*i + 6 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 292.88 1.9111 \n")
+
+
+            LJ.append(f"{9*i + 3*nr_h20} 3.5 0.276144 \n")
+            LJ.append(f"{9*i + 4 + 3*nr_h20} 3.5 0.276144 \n")
+
+            LJ.append(f"{9*i + 1 + 3*nr_h20} 2.5 0.12552 \n")
+            LJ.append(f"{9*i + 2 + 3*nr_h20} 2.5 0.12552 \n")
+            LJ.append(f"{9*i + 3 + 3*nr_h20} 2.5 0.12552 \n")
+            LJ.append(f"{9*i + 5 + 3*nr_h20} 2.5 0.12552 \n")
+            LJ.append(f"{9*i + 6 + 3*nr_h20} 2.5 0.12552 \n")
+
+            LJ.append(f"{9*i + 7 + 3*nr_h20} 3.12 0.71128 \n")
+
+            molecules.append(f"{9*i + 3*nr_h20} {9*i + 1 + 3*nr_h20} {9*i + 2 + 3*nr_h20} {9*i + 3 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} {9*i + 6 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} \n")
+
+        # Write to topology file
+        top_file.write(f"bonds {2*nr_h20 + 8*nr_ethanol} \n")
+        for string in bonds:
+            top_file.write(string)
+        top_file.write(f"angles {nr_h20 + 13*nr_ethanol} \n")
+        for string in angles:
+            top_file.write(string)
+        top_file.write(f"LJ {nr_h20 + 8*nr_ethanol} \n")
+        for string in LJ:
+            top_file.write(string)
+        top_file.write(f"molecules {nr_h20 + nr_ethanol} \n")
+        for string in molecules:
+            top_file.write(string)
+
+def distance(pos_1, pos_2, box_length):
+    x = helper.abs_min(pos_1[0] - pos_2[0], pos_1[0]  - pos_2[0] + box_length, pos_1[0]  - pos_2[0] - box_length)  
+
+    y = helper.abs_min(pos_1[1] - pos_2[1], 
+                pos_1[1]  - pos_2[1] + box_length, 
+                pos_1[1]  - pos_2[1] - box_length) 
+        
+    z = helper.abs_min(pos_1[2] - pos_2[2], 
+                pos_1[2]  - pos_2[2] + box_length, 
+                pos_1[2]  - pos_2[2] - box_length)        
+        
+    return helper.norm(x,y,z)
+
+
+def check_placement(molecule, pos, box):
+    for com in pos:
+        if distance(molecule, com, box) < 3:
+            return True
+
+    return False
 
 # Testing of the functions
 if __name__ == "__main__":
-    pos, atom_names, atoms = read_xyz("data/water_top.xyz")
-    bonds, const_bonds, angles, const_angles, lj, const_lj, molecules = read_topology("data/top.itp")
-    
-    m = np.array([15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784, 15.999, 1.00784, 1.00784]) # amu
-    r_cut = 4.8
-    matrix = create_list(molecules)
-    nl = neighbor_list(pos, m, molecules, r_cut)
-    print(nl[0])
-    #print(matrix[[0,1]])
-    lj_atoms = np.concatenate([matrix[i[0]][i[1]] for i in nl])
+    #pos, atom_names, atoms = read_xyz("data/water_top.xyz")
+    #bonds, const_bonds, angles, const_angles, lj, const_lj, molecules = read_topology("data/top.itp")  
 
-    print(lj_atoms)
+    nr_h20 = 1
+    nr_ethanol = 2
+    box_size = 10
+    output_file_xyz = "data/ethanol.xyz"
+    output_file_top = "data/ethanol.itp"
+
+    create_dataset(nr_h20, nr_ethanol, box_size, output_file_xyz, output_file_top)

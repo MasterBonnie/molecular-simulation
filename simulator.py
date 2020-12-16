@@ -1,12 +1,13 @@
 import numpy as np
 import math
 from collections import deque
-from numba import vectorize, float64, jit, guvectorize
+from numba import vectorize, float64, jit, guvectorize, double
+import cProfile
 
 import io_sim
 from helper import atom_string, random_unit_vector, unit_vector, angle_between, atom_name_to_mass, cartesianprod, create_list, neighbor_list, distance_PBC
 import integrators
-from static_state import centre_of_mass, compute_force
+from static_state import centre_of_mass, compute_force, project_pos
 
 def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, 
                 observable_function = None, integrator="vv", write_output = True):
@@ -41,6 +42,10 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
 
     t = 0
 
+    # Progress bar variables
+    total_progress = int(T/dt)
+    progress = 1
+
     # Converts our force units to the force 
     # with unit amu A (0.1ps)^-2
     cf = 1.6605*6.022e-1 
@@ -67,7 +72,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
     molecule_to_atoms = create_list(molecules)
 
     # Random initial velocity
-    v = 5*unit_vector(np.random.uniform(size=[nr_atoms,3]))
+    v = unit_vector(np.random.uniform(size=[nr_atoms,3]))
 
     # Open the output file
     with open(file_out, "w") as output_file, open(file_observable, "w") as obs_file:
@@ -97,15 +102,17 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
             pos, v, _ = integrators.integrator_euler(pos, v, f, m, dt)
             
             t += dt
+            progress += 1
 
         # Compute the force on the entire system
         centres_of_mass = centre_of_mass(pos, m, molecules)
+        project_pos(centres_of_mass, box_size, pos, molecules)
         lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size)
         f = cf*compute_force(pos, bonds, const_bonds, angles,
                         const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms, box_size)
 
         while t < T:
-
+            io_sim.printProgressBar(progress, total_progress)
 
             # if we want to calculate something
             if observable_function:
@@ -116,6 +123,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
                 pos, v, _ = integrators.integrator_euler(pos, v, f, m, dt)
 
                 centres_of_mass = centre_of_mass(pos, m, molecules)
+                project_pos(centres_of_mass, box_size, pos, molecules)
                 lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size)
                 f = cf*compute_force(pos, bonds, const_bonds, angles,
                             const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms, box_size)
@@ -124,6 +132,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
                 pos, _ = integrators.integrator_velocity_verlet_pos(pos, v, f, m, dt)
 
                 centres_of_mass = centre_of_mass(pos, m, molecules)
+                project_pos(centres_of_mass, box_size, pos, molecules)
                 lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size)
 
                 f_old, f = f, cf*compute_force(pos, bonds, const_bonds, angles,
@@ -141,13 +150,14 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
                         const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms, box_size)
             
             t += dt
+            progress += 1
 
             # I/O operations
             if write_output:
                 output_file.write(f"{nr_atoms}" + '\n')
                 output_file.write("Comments" + '\n')
 
-                for atom_name, atom in enumerate(np.mod(pos, box_size)):
+                for atom_name, atom in enumerate(pos):
                     output_file.write(atom_string(atoms[atom_name], atom))
 
     return
@@ -172,15 +182,17 @@ def phase_space_h(pos, v, f, obs_file):
 if __name__ == "__main__":
 
     # Water file
-    dt = 0.001 # 0.1 ps
-    T = 10  # 0.1 ps
-    r_cut = 3 # A
-    box_size = 8 # A
-    file_xyz = "data/water_top.xyz"
-    file_top = "data/top.itp"
+    dt = 0.02 # 0.1 ps
+    T = 100   # 10^-13 s
+    r_cut = 8 # A
+    box_size = 50 # A
+    file_xyz = "data/test_500.xyz"
+    file_top = "data/test_500.itp"
     file_out = "output/result.xyz"
     file_observable = "output/result_phase.csv"
     observable_function = None
+    integrator = "vv"
+    write_output = True
 
     # Hydrogen file
     # m = np.array([1.00784, 1.00784]) # amu
@@ -191,5 +203,5 @@ if __name__ == "__main__":
     # file_out = "output/result_h2.xyz"
     # file_observable = "output/result_phase.csv"
     # observable_function = phase_space_h
-
-    integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, observable_function)
+    #cProfile.run("integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, observable_function, integrator, write_output)")
+    integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, observable_function, integrator, write_output)
