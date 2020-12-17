@@ -81,12 +81,8 @@ def read_topology(input):
                 constant for the associated interaction between
                 molecules in the same row as in lj
 
-    NOTE: if there are no angles in the file, angles and
-          const_angles are None. We assume there are always 
-          bonds. Same for lj interactions. For now no angles
-          must mean no lj interactions
-    NOTE: Maybe this has to be changed, as the constants now need
-          to be hard coded for the lj interactions.
+    NOTE: We assume there are always bonds, angles, lj and molecules,
+          dihedrals are optional
     """
 
     with open(input, "r") as inputfile:
@@ -145,7 +141,25 @@ def read_topology(input):
         
         molecules = np.asarray(molecules, dtype=np.int)
 
-    return bonds, const_bonds, angles, const_angles, lj, const_lj, molecules
+        line = inputfile.readline()
+
+        if not line:
+            return bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, None, None
+
+        
+        line = line.split()
+        nr_dihedrals = int(line[1])
+
+        dihedrals = np.zeros((nr_dihedrals, 4), dtype=np.int)
+        const_dihedrals = np.zeros((nr_dihedrals, 4))
+
+        for i in range(nr_dihedrals):
+            line = inputfile.readline()
+            line = line.split()
+            dihedrals[i] = np.asarray(line[0:4], dtype=np.int)
+            const_dihedrals[i] = np.asarray(line[4:])
+
+    return bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals
 
 def handle_comment(line):
     """ handles comment line of a xyz file"""
@@ -218,6 +232,7 @@ def create_dataset(nr_h20, nr_ethanol, box_size, output_file_xyz, output_file_to
         angles = []
         LJ = []
         molecules = []
+        dihedrals = []
 
         pos = []
 
@@ -317,6 +332,23 @@ def create_dataset(nr_h20, nr_ethanol, box_size, output_file_xyz, output_file_to
 
             molecules.append(f"{9*i + 3*nr_h20} {9*i + 1 + 3*nr_h20} {9*i + 2 + 3*nr_h20} {9*i + 3 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} {9*i + 6 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} \n")
 
+            dihedrals.append(f"{9*i + 1 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 0.6276 1.8828 0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 0.6276 1.8828 0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 0.6276 1.8828 0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 1 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 0.6276 1.8828 0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 0.6276 1.8828 0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 0.6276 1.8828 0 -3.91622 \n")
+
+            dihedrals.append(f"{9*i + 1 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 0.97905 2.93716 0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 0.97905 2.93716 0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 0.97905 2.93716 0 -3.91622 \n")
+
+            dihedrals.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} -0.4431 3.83255 0.72801 -4.11705 \n")
+
+            dihedrals.append(f"{9*i + 5 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 0.94140 2.82420 0 -3.76560 \n")
+            dihedrals.append(f"{9*i + 6 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 0.94140 2.82420 0 -3.76560 \n")
+
+
         # Write to topology file
         top_file.write(f"bonds {2*nr_h20 + 8*nr_ethanol} \n")
         for string in bonds:
@@ -330,6 +362,10 @@ def create_dataset(nr_h20, nr_ethanol, box_size, output_file_xyz, output_file_to
         top_file.write(f"molecules {nr_h20 + nr_ethanol} \n")
         for string in molecules:
             top_file.write(string)
+        if dihedrals:
+            top_file.write(f"dihedrals {12*nr_ethanol} \n")
+            for string in dihedrals:
+                top_file.write(string)
 
 def distance(pos_1, pos_2, box_length):
     x = helper.abs_min(pos_1[0] - pos_2[0], pos_1[0]  - pos_2[0] + box_length, pos_1[0]  - pos_2[0] - box_length)  
@@ -358,9 +394,9 @@ if __name__ == "__main__":
     #bonds, const_bonds, angles, const_angles, lj, const_lj, molecules = read_topology("data/top.itp")  
 
     nr_h20 = 1
-    nr_ethanol = 2
+    nr_ethanol = 0
     box_size = 10
-    output_file_xyz = "data/ethanol.xyz"
-    output_file_top = "data/ethanol.itp"
+    output_file_xyz = "data/water.xyz"
+    output_file_top = "data/water.itp"
 
     create_dataset(nr_h20, nr_ethanol, box_size, output_file_xyz, output_file_top)

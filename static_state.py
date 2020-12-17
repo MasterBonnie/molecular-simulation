@@ -28,6 +28,59 @@ def centre_of_mass(pos, m, molecules):
 
     return centre_of_mass
 
+def kinetic_energy(v, m):
+    """
+    Computes the kinetic energy of the system
+    """
+    p = m[:, np.newaxis]*v
+    dot = np.einsum('ij,ij->i', p, p)
+    summands = np.true_divide(dot, 2*m)
+    return np.sum(summands)
+
+def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
+                    box_size):
+    """
+    Calculates the potential energy of the system
+    """
+    energy = 0
+    # Energy due to bonds 
+    #----------------------------------
+    # Difference vectors for the bonds, and the
+    # distance between these atoms
+    diff = pos[bonds[:,0]] - pos[bonds[:,1]]
+    dis = np.linalg.norm(diff, axis=1)
+
+    # Calculate the energy between the atoms
+    energy_bond = np.multiply(0.5*const_bonds[:,0], np.power((dis - const_bonds[:,1]),2))
+    energy += np.sum(energy_bond)
+
+    #----------------------------------
+    # Energy due to angles
+    #----------------------------------
+    # The difference vectors we need for the angles
+    diff_1 = pos[angles[:,1]] - pos[angles[:,0]]
+    diff_2 = pos[angles[:,1]] - pos[angles[:,2]]
+    ang = angle_between(diff_1, diff_2)
+    
+    # The constant we need for the force calculation
+    energy_angle = np.multiply(0.5*const_angles[:,0], np.power((ang - const_angles[:,1]),2))
+    energy += np.sum(energy_angle)
+
+    #----------------------------------
+    # Energy due to LJ interactions
+    #----------------------------------
+    if lj_atoms.shape[0] != 0:
+        diff = np.zeros((lj_atoms.shape[0], 3))
+        dis = np.zeros(diff.shape[0])
+        distance_PBC(pos[lj_atoms[:,0]], pos[lj_atoms[:,1]],  box_size, dis, diff)
+
+        term = np.true_divide(lj_sigma[lj_atoms[:,0], lj_atoms[:,1]], dis)
+        term_1 = np.power(term, 6)
+
+        energy_lj = np.multiply(lj_eps[lj_atoms[:,0], lj_atoms[:,1]], np.power(term_1, 2) - term_1)
+        energy += np.sum(energy_lj)
+
+    return energy
 
 #https://gist.github.com/ufechner7/98bcd6d9915ff4660a10
 @jit
@@ -47,7 +100,7 @@ def cross_(vec1, vec2, result):
         result[i][2] = a1 * b2 - a2 * b1
     return result
 
-def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms,
+def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
                     box_size):
     """
     Computes the force on each atom, given the position and information from a 
@@ -120,7 +173,7 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     #----------------------------------
     # Forces due to Lennard Jones interaction
     #----------------------------------
-    # if lj_atoms is not empty
+    #if lj_atoms is not empty
     if lj_atoms.shape[0] != 0:
         diff = np.zeros((lj_atoms.shape[0], 3))
         dis = np.zeros(diff.shape[0])
@@ -136,6 +189,12 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
         np.add.at(force_total, lj_atoms[:,0], force)
         np.add.at(force_total, lj_atoms[:,1], -force)
 
+    #----------------------------------
+    # Forces due to dihedral angles
+    #----------------------------------
+    if dihedrals is not None:
+        pass
+    
     return force_total
 
     
@@ -164,10 +223,11 @@ if __name__ == "__main__":
                      [2.5, 1.9, 1.9],
                      [1.9, 1.9, 1.9]])
     molecules = [[0], [1,2]]
-    m = np.array([1.,1.,1.])
+    m = np.array([1.,2.,3.])
     box_size = 2
-    com = centre_of_mass(pos, m, molecules)
-    calculate_displacement(com, box_size, np.zeros(com.shape))
-    project_pos(com, box_size, pos, molecules)
+    # com = centre_of_mass(pos, m, molecules)
+    # calculate_displacement(com, box_size, np.zeros(com.shape))
+    # project_pos(com, box_size, pos, molecules)
     
-
+    p = m[:, np.newaxis]*pos
+    print(p)
