@@ -7,6 +7,7 @@ import math
 _atom_mass = {
     "O": 15.999,
     "H": 1.00784,
+    "C": 12.011
 }
 
 def unit_vector(vector):
@@ -29,7 +30,7 @@ def angle_between(v1, v2):
     dot = np.einsum('ij,ij->i', v1, v2)
 
     # We then get the angle from this
-    ang = np.arccos(dot)
+    ang = np.arccos(np.clip(dot, -1.0,1.0))
     return ang
 
 def random_unit_vector(const = 1):
@@ -47,7 +48,8 @@ def atom_string(atom, pos):
     """
     returns string format correct for xyz file
     """
-    return atom + " " +  np.array2string(pos, separator=" ")[1:-1] + "\n"   
+    return f"{atom} {pos[0]} {pos[1]} {pos[2]} \n"
+    #return atom + " " +  np.array2string(pos, separator=" ")[1:-1] + "\n"   
 
 def atom_name_to_mass(atoms):
     """ converts an atom name to its mass"""
@@ -101,21 +103,21 @@ def norm(x,y,z):
     """ 2-norm of a vector"""
     return math.sqrt(x*x + y*y + z*z)
 
-#@jit(nopython=True, cache=True)
-def abs_min(array):
+@jit(nopython=True, cache=True)
+def abs_min(x1,x2,x3):
     """
     returns minimum of the absolute value of a (x,y,z) triplet
     """
-    res = array[0]
-    if abs(res) > abs(array[1]):
-        res = array[1]
-    if abs(res) > abs(array[2]):
-        res = array[2]
+    res = x1
+    if abs(res) > abs(x2):
+        res = x2
+    if abs(res) > abs(x3):
+        res = x3
 
     return res
 
-#@guvectorize([(float64[:,:,:], float64, float64[:,:])], "(n,n,p),()->(n,n)",
-#            nopython=True, cache=True)
+@guvectorize([(float64[:,:,:], float64, float64[:,:])], "(n,n,p),()->(n,n)",
+            nopython=True, cache=True)
 def distance_PBC_matrix(diff, box_length, res):
     """
     Function to compute the distance of a matrix of vectors when considering
@@ -130,28 +132,28 @@ def distance_PBC_matrix(diff, box_length, res):
     # TODO: combine this with the function below
     """
 
-    diff = np.mod(diff, box_length)
+    #diff = np.mod(diff, box_length)
 
     for i in range(diff.shape[0]):
         for j in range(diff.shape[0]):
             if j > i:
-                x = abs_min([diff[i][j][0], 
+                x = abs_min(diff[i][j][0], 
                         diff[i][j][0] + box_length, 
-                        diff[i][j][0] - box_length])
+                        diff[i][j][0] - box_length)
 
-                y = abs_min([diff[i][j][1], 
+                y = abs_min(diff[i][j][1], 
                         diff[i][j][1] + box_length, 
-                        diff[i][j][1] - box_length]) 
+                        diff[i][j][1] - box_length) 
                 
-                z = abs_min([diff[i][j][2], 
+                z = abs_min(diff[i][j][2], 
                         diff[i][j][2] + box_length, 
-                        diff[i][j][2] - box_length])       
+                        diff[i][j][2] - box_length)       
 
                 res[i][j] = norm(x,y,z)
 
 
-#@guvectorize([(float64[:,:], float64[:,:], float64, float64[:], float64[:,:])], "(n,p),(n,p),()->(n),(n,p)",
-#            nopython=True, cache=True)
+@guvectorize([(float64[:,:], float64[:,:], float64, float64[:], float64[:,:])], "(n,p),(n,p),()->(n),(n,p)",
+            nopython=True, cache=True)
 def distance_PBC(pos_1, pos_2, box_length, res, diff):
     """
     Function to compute the distance between two positions when considering
@@ -166,21 +168,19 @@ def distance_PBC(pos_1, pos_2, box_length, res, diff):
 
     # TODO: rewrite this back to a numba function (this is also the reason for no return statement)
     """
-    pos_1 = np.mod(pos_1, box_length)
-    pos_2 = np.mod(pos_2, box_length)
+    #pos_1 = np.mod(pos_1, box_length)
+    #pos_2 = np.mod(pos_2, box_length)
 
     for i in range(diff.shape[0]):
-        x = abs_min([pos_1[i][0] - pos_2[i][0], 
-                pos_1[i][0]  - pos_2[i][0] + box_length, 
-                pos_1[i][0]  - pos_2[i][0] - box_length])  
+        x = abs_min(pos_1[i][0] - pos_2[i][0], pos_1[i][0]  - pos_2[i][0] + box_length, pos_1[i][0]  - pos_2[i][0] - box_length)  
 
-        y = abs_min([pos_1[i][1] - pos_2[i][1], 
+        y = abs_min(pos_1[i][1] - pos_2[i][1], 
                 pos_1[i][1]  - pos_2[i][1] + box_length, 
-                pos_1[i][1]  - pos_2[i][1] - box_length]) 
+                pos_1[i][1]  - pos_2[i][1] - box_length) 
         
-        z = abs_min([pos_1[i][2] - pos_2[i][2], 
+        z = abs_min(pos_1[i][2] - pos_2[i][2], 
                 pos_1[i][2]  - pos_2[i][2] + box_length, 
-                pos_1[i][2]  - pos_2[i][2] - box_length])        
+                pos_1[i][2]  - pos_2[i][2] - box_length)        
         
         diff[i] = np.array([x,y,z])
         res[i] = norm(x,y,z)
