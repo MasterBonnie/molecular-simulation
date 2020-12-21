@@ -313,7 +313,7 @@ def create_dataset(nr_h20, nr_ethanol, box_size, output_file_xyz, output_file_to
 
             angles.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 414.4 1.9111 \n")
 
-            angles.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 460.24 1.8937 \n")
+            angles.append(f"{9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 460.24 1.8937 \n")
 
             angles.append(f"{9*i + 5 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 292.88 1.9111 \n")
             angles.append(f"{9*i + 6 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 292.88 1.9111 \n")
@@ -332,21 +332,21 @@ def create_dataset(nr_h20, nr_ethanol, box_size, output_file_xyz, output_file_to
 
             molecules.append(f"{9*i + 3*nr_h20} {9*i + 1 + 3*nr_h20} {9*i + 2 + 3*nr_h20} {9*i + 3 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} {9*i + 6 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} \n")
 
-            dihedrals.append(f"{9*i + 1 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 0.6276 1.8828 0 -3.91622 \n")
-            dihedrals.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 0.6276 1.8828 0 -3.91622 \n")
-            dihedrals.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 0.6276 1.8828 0 -3.91622 \n")
-            dihedrals.append(f"{9*i + 1 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 0.6276 1.8828 0 -3.91622 \n")
-            dihedrals.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 0.6276 1.8828 0 -3.91622 \n")
-            dihedrals.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 0.6276 1.8828 0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 1 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 0.6276 1.8828 0.0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 0.6276 1.8828 0.0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 0.6276 1.8828 0.0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 1 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 0.6276 1.8828 0.0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 0.6276 1.8828 0.0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 0.6276 1.8828 0.0 -3.91622 \n")
 
-            dihedrals.append(f"{9*i + 1 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 0.97905 2.93716 0 -3.91622 \n")
-            dihedrals.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 0.97905 2.93716 0 -3.91622 \n")
-            dihedrals.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 0.97905 2.93716 0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 1 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 0.97905 2.93716 0.0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 0.97905 2.93716 0.0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 0.97905 2.93716 0.0 -3.91622 \n")
 
             dihedrals.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} -0.4431 3.83255 0.72801 -4.11705 \n")
 
-            dihedrals.append(f"{9*i + 5 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 0.94140 2.82420 0 -3.76560 \n")
-            dihedrals.append(f"{9*i + 6 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 0.94140 2.82420 0 -3.76560 \n")
+            dihedrals.append(f"{9*i + 5 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 0.94140 2.82420 0.0 -3.76560 \n")
+            dihedrals.append(f"{9*i + 6 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 0.94140 2.82420 0.0 -3.76560 \n")
 
 
         # Write to topology file
@@ -395,8 +395,8 @@ if __name__ == "__main__":
 
     nr_h20 = 1
     nr_ethanol = 0
-    box_size = 10
-    output_file_xyz = "data/water.xyz"
-    output_file_top = "data/water.itp"
+    box_size = 2
+    output_file_xyz = "data/water_small.xyz"
+    output_file_top = "data/water_small.itp"
 
     create_dataset(nr_h20, nr_ethanol, box_size, output_file_xyz, output_file_top)

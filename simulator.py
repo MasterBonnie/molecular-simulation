@@ -74,8 +74,6 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
     # Random initial velocity
     v = unit_vector(np.random.uniform(size=[nr_atoms,3]))
 
-
-
     # Open the output file
     with open(file_out, "w") as output_file, open(file_observable, "w") as obs_file:
         # I/O operations
@@ -118,7 +116,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
         #                box_size) + kinetic_energy(v,m))
 
         while t < T:
-            io_sim.printProgressBar(progress, total_progress)
+            #io_sim.printProgressBar(progress, total_progress)
 
             # if we want to calculate something
             if observable_function:
@@ -134,14 +132,15 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
             #     f = cf*compute_force(pos, bonds, const_bonds, angles,
             #                 const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms, box_size)
 
-            elif integrator == "vv":
-                pos, _ = integrators.integrator_velocity_verlet_pos(pos, v, f, m, dt)
+            if integrator == "vv":
+                pos = integrators.integrator_velocity_verlet_pos(pos, v, f, m, dt)
 
                 centres_of_mass = centre_of_mass(pos, m, molecules)
                 project_pos(centres_of_mass, box_size, pos, molecules)
                 lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size)
 
-                f_old, f = f, cf*compute_force(pos, bonds, const_bonds, angles,
+                f_old = f
+                f = cf*compute_force(pos, bonds, const_bonds, angles,
                                     const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms, box_size)
                 v = integrators.integrator_velocity_verlet_vel(v, f_old, f, m, dt)
 
@@ -159,9 +158,20 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
             progress += 1
 
             # I/O operations
-
+            
+            #print("Potential: ", end="")
             #print(potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
-            #        box_size) + kinetic_energy(v,m))
+            #        box_size))
+            #print("Kinetic: ", end="")
+            #print(kinetic_energy(v,m))
+
+            print("Total: ", end="")
+            energy_kinetic = kinetic_energy(v,m)
+            energy_potential = potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
+                    box_size)
+            energy_total = energy_kinetic + energy_potential
+            print(energy_total)
+            obs_file.write(f"{energy_potential}, {energy_kinetic}, {energy_total} \n")
 
             if write_output:
                 output_file.write(f"{nr_atoms}" + '\n')
@@ -171,6 +181,8 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
                     output_file.write(atom_string(atoms[atom_name], atom))
 
     return
+
+    
 
 def phase_space_h(pos, v, f, obs_file):
     """
@@ -192,15 +204,15 @@ def phase_space_h(pos, v, f, obs_file):
 if __name__ == "__main__":
 
     # Water file
-    dt = 0.02 # 0.1 ps
-    T = 100  # 10^-13 s
+    dt = 0.001 # 0.1 ps
+    T = 0.1  # 10^-13 s
     r_cut = 8 # A
     box_size = 50 # A
-    file_xyz = "data/test_500.xyz"
-    file_top = "data/test_500.itp"
+    file_xyz = "data/water.xyz"
+    file_top = "data/water.itp"
     file_out = "output/result.xyz"
     file_observable = "output/result_phase.csv"
-    observable_function = None
+    observable_function = None  
     integrator = "vv"
     write_output = True
 

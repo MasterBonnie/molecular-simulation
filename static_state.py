@@ -32,10 +32,12 @@ def kinetic_energy(v, m):
     """
     Computes the kinetic energy of the system
     """
-    p = m[:, np.newaxis]*v
-    dot = np.einsum('ij,ij->i', p, p)
-    summands = np.true_divide(dot, 2*m)
-    return np.sum(summands)
+    #print(v)
+    dot = np.einsum('ij,ij->i', v, v)
+    #print(dot)
+    summands = np.multiply(dot, m)
+    #return (1.6605/(60.22))*0.5*np.sum(summands)
+    return 0.5*np.sum(summands)
 
 def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
                     box_size):
@@ -43,6 +45,7 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
     Calculates the potential energy of the system
     """
     energy = 0
+    # print(energy)
     # Energy due to bonds 
     #----------------------------------
     # Difference vectors for the bonds, and the
@@ -53,6 +56,7 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
     # Calculate the energy between the atoms
     energy_bond = np.multiply(0.5*const_bonds[:,0], np.power((dis - const_bonds[:,1]),2))
     energy += np.sum(energy_bond)
+    # print(energy_bond)
 
     #----------------------------------
     # Energy due to angles
@@ -65,6 +69,7 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
     # The constant we need for the force calculation
     energy_angle = np.multiply(0.5*const_angles[:,0], np.power((ang - const_angles[:,1]),2))
     energy += np.sum(energy_angle)
+    # print(energy_angle)
 
     #----------------------------------
     # Energy due to LJ interactions
@@ -80,16 +85,35 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
         energy_lj = np.multiply(lj_eps[lj_atoms[:,0], lj_atoms[:,1]], np.power(term_1, 2) - term_1)
         energy += np.sum(energy_lj)
 
+    if dihedrals is not None:
+        i = pos[dihedrals[:,0]]
+        j = pos[dihedrals[:,1]]
+        k = pos[dihedrals[:,2]]
+        l = pos[dihedrals[:,3]]
+
+        ji = i - j
+        lk = k - l
+
+        dihedral_angle = angle_between(ji, lk)
+        psi = dihedral_angle - np.pi
+
+        C_1 = const_dihedrals[:,0]
+        C_2 = const_dihedrals[:,1]
+        C_3 = const_dihedrals[:,2]
+        C_4 = const_dihedrals[:,3]
+        energy_dihedral = 0.5*(C_1*(1 + np.cos(psi)) + C_2*(1 - np.cos(2*psi)) + C_3*(1 + np.cos(3*psi)) + C_4*(1 - np.cos(4*psi)))
+        energy += np.sum(energy_dihedral)
+    # print(energy)
     return energy
 
 #https://gist.github.com/ufechner7/98bcd6d9915ff4660a10
-@jit
+@jit(nopython=True, cache=True)
 def cross(vec1, vec2):
     """ Calculate the cross product of two 3d vectors. """
     result = np.zeros((vec1.shape[0],3))
     return cross_(vec1, vec2, result)
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def cross_(vec1, vec2, result):
     """ Calculate the cross product of array of 3d vectors. """
     for i in range(vec1.shape[0]):
@@ -144,7 +168,6 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     #----------------------------------
     # Forces due to angles in molecules
     #----------------------------------
-    
     # The difference vectors we need for the angles
     diff_1 = pos[angles[:,1]] - pos[angles[:,0]]
     dis_1 = np.linalg.norm(diff_1, axis=1)
@@ -193,11 +216,49 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     # Forces due to dihedral angles
     #----------------------------------
     if dihedrals is not None:
-        pass
-    
+
+        i = pos[dihedrals[:,0]]
+        j = pos[dihedrals[:,1]]
+        k = pos[dihedrals[:,2]]
+        l = pos[dihedrals[:,3]]
+
+        ji = i - j
+        lk = k - l
+
+        dihedral_angle = angle_between(ji, lk)
+        psi = dihedral_angle - np.pi
+
+        c = (j+k)/2.0
+
+        ijk = angle_between(i - j, k - j)
+        jkl = angle_between(j - k, l - k)
+
+        C_1 = const_dihedrals[:,0]
+        C_2 = const_dihedrals[:,1]
+        C_3 = const_dihedrals[:,2]
+        C_4 = const_dihedrals[:,3]
+        magnitude = 0.5*(C_1*np.sin(psi) - 2*C_2*np.sin(2*psi) + 3*C_3*np.sin(3*psi) - 4*C_4*np.sin(4*psi))
+
+
+        f_i_unit = unit_vector(cross(j - i, k - j))
+        f_l_unit = unit_vector(cross(l - k, k - j))
+
+        force_i = (magnitude/(np.linalg.norm(j - i, axis=1)*np.sin(ijk)))[:, np.newaxis]*f_i_unit     
+        force_l = (magnitude/(np.linalg.norm(k - l, axis=1)*np.sin(jkl)))[:, np.newaxis]*f_l_unit
+        force_k = (1/(np.linalg.norm(k - c, axis=1)**2))[:, np.newaxis]*cross(cross(k-c, force_l) + 0.5*cross(l - k, force_l) + 0.5*cross(i-j, force_i), k - c)
+        force_j = -(force_i + force_l + force_k)
+
+
+        #torque = cross(i - c, force_i) + cross(j - c, force_j) + cross(k - c, force_k) + cross(l - c, force_l)
+        #print(torque)
+
+        np.add.at(force_total, dihedrals[:,0], force_i)
+        np.add.at(force_total, dihedrals[:,1], force_j)
+        np.add.at(force_total, dihedrals[:,2], force_k)
+        np.add.at(force_total, dihedrals[:,3], force_l)
+    #print(force_total)
     return force_total
 
-    
 
 #@guvectorize([(float64[:,:], float64, float64[:,:])], "(n,p), ()->(n,p)",
 #            nopython=True, cache=True)

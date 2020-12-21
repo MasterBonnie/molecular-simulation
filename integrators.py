@@ -79,9 +79,8 @@ def integrator_velocity_verlet_pos(x, v, f, m, delta_t):
     """
 
     x_new = x + delta_t*v + (delta_t**2 / 2)*np.true_divide(f, m[:, np.newaxis])
-    x_update = x_new - x
 
-    return x_new, x_update
+    return x_new
 
 def integrator_velocity_verlet_vel(v, f, f_new, m, delta_t):
     """
@@ -97,6 +96,6 @@ def integrator_velocity_verlet_vel(v, f, f_new, m, delta_t):
         v_new: new velocity
     """
 
-    v_new = v + (delta_t/2)*np.true_divide(f_new+f, m[:, np.newaxis])
+    v_new = v + (delta_t/2)*np.true_divide(f_new + f, m[:, np.newaxis])
 
     return v_new
