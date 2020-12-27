@@ -72,7 +72,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
     molecule_to_atoms = create_list(molecules)
 
     # Random initial velocity
-    v = unit_vector(np.random.uniform(size=[nr_atoms,3]))
+    v = 3*unit_vector(np.random.uniform(size=[nr_atoms,3]))
 
     # Open the output file
     with open(file_out, "w") as output_file, open(file_observable, "w") as obs_file:
@@ -165,13 +165,13 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
             #print("Kinetic: ", end="")
             #print(kinetic_energy(v,m))
 
-            print("Total: ", end="")
+            #print("Total: ", end="")
             energy_kinetic = kinetic_energy(v,m)
-            energy_potential = potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
+            energy_potential, energy_bond, energy_angle, energy_dihedral = potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
                     box_size)
             energy_total = energy_kinetic + energy_potential
-            print(energy_total)
-            obs_file.write(f"{energy_potential}, {energy_kinetic}, {energy_total} \n")
+            #print(energy_total)
+            obs_file.write(f"{energy_potential}, {energy_kinetic}, {energy_total}, {energy_bond}, {energy_angle}, {energy_dihedral} \n")
 
             if write_output:
                 output_file.write(f"{nr_atoms}" + '\n')
@@ -205,11 +205,11 @@ if __name__ == "__main__":
 
     # Water file
     dt = 0.001 # 0.1 ps
-    T = 0.1  # 10^-13 s
+    T = 0.1 # 10^-13 s
     r_cut = 8 # A
-    box_size = 50 # A
-    file_xyz = "data/water.xyz"
-    file_top = "data/water.itp"
+    box_size = 5 # A
+    file_xyz = "data/ethanol.xyz"
+    file_top = "data/ethanol.itp"
     file_out = "output/result.xyz"
     file_observable = "output/result_phase.csv"
     observable_function = None  

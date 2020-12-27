@@ -1,7 +1,7 @@
 import numpy as np
 from numba import vectorize, float64, jit, guvectorize
 import math
-import static_state
+#import static_state
 
 """ helper/misc. functions and constants """
 
@@ -11,13 +11,16 @@ _atom_mass = {
     "C": 12.011
 }
 
-def unit_vector(vector):
+def angle_to_radian(angle):
+    return (angle*np.pi)/180.0
+
+def unit_vector(matrix_):
     """ 
     Returns the unit vector of the vector.  
     if input is matrix does this for each row.
     """
     # OLD return vector / np.linalg.norm(vector)
-    return vector/np.linalg.norm(vector, ord=2, axis=1, keepdims=True)
+    return matrix_/np.linalg.norm(matrix_, ord=2, axis=1, keepdims=True)
 
 
 def angle_between(v1, v2):
@@ -31,8 +34,8 @@ def angle_between(v1, v2):
     dot = np.einsum('ij,ij->i', v1, v2)
 
     # We then get the angle from this
-    ang = np.arccos(np.clip(dot, -1.0,1.0))
-    return ang
+    #ang = np.arccos(np.clip(dot, -1.0,1.0))
+    return np.arccos(dot)
 
 def random_unit_vector(const = 1):
     """

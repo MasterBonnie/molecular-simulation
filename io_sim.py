@@ -4,6 +4,8 @@ import json
 import static_state
 import helper
 
+import matplotlib.pyplot as plt
+
 
 """ File for all I/O operations """
 
@@ -57,6 +59,47 @@ def read_xyz(input):
             # ------------------------------------
 
     return pos, atom_names, atoms
+
+def radial_distribution_function(file, dr, box_size):
+    """
+    Calculates the radial distribution function for a given xyz file
+    """
+    with open(file, "r") as input_file:    
+        while True:   
+            line = input_file.readline()
+
+            if not line:
+                break
+            nr_atoms = int(line)
+
+            # Comment
+            line = input_file.readline()
+
+            # Position stores the positions of all atoms
+            # in one time step
+            pos = np.zeros((nr_atoms, 3))
+            atom_names = []
+
+            # We read out all the atoms
+            for i in range(nr_atoms):
+                line = input_file.readline()
+                splittedLine = line.split()
+                pos[i] = np.asarray(splittedLine[1:], np.float)
+                atom_names.append(splittedLine[0])
+            
+            reference_position = np.ones((nr_atoms, 3))*pos[0]
+            res = np.zeros((nr_atoms))
+            diff = np.zeros((nr_atoms, 3))
+            helper.distance_PBC(reference_position, pos, box_size, res, diff)
+
+            histo = np.histogram(res, np.arange(0, box_size + dr, dr))[0]
+            histo = histo/(nr_atoms*box_size**3)
+            cf = np.array([(4*np.pi/3)*(((i+1)*dr)**3-(i*dr)**3) for i in range(int(box_size/dr))])
+            histo = histo*cf
+
+            plt.plot(histo)
+            plt.show()
+
 
 def read_topology(input):
     """
@@ -218,7 +261,7 @@ _ethanol_patern = np.array([
 
 _ethanol_atoms = ["C","H","H","H","C","H","H","O","H"]
 
-def create_dataset(nr_h20, nr_ethanol, box_size, output_file_xyz, output_file_top):
+def create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top):
     """ 
     Creates a dataset with nr_h20 water molecules and nr_ethanol ethanol molecules
     Randomly placed inside a box of size box_size.
@@ -237,6 +280,7 @@ def create_dataset(nr_h20, nr_ethanol, box_size, output_file_xyz, output_file_to
         pos = []
 
         for i in range(nr_h20):
+            print(f"{i}th water molecule")
             random_displacement = np.random.uniform(0, box_size, (3))
             water = np.asarray([_water_patern[0] + random_displacement,
                                _water_patern[1] + random_displacement,
@@ -244,7 +288,7 @@ def create_dataset(nr_h20, nr_ethanol, box_size, output_file_xyz, output_file_to
 
             com = (15.999*water[0] + water[1] + water[2])/16.
 
-            while check_placement(com, pos, box_size):
+            while check_placement(com, pos, box_size, tol_h20):
                 random_displacement = np.random.uniform(0, box_size, (3))
                 water = np.asarray([_water_patern[0] + random_displacement,
                                _water_patern[1] + random_displacement,
@@ -268,17 +312,18 @@ def create_dataset(nr_h20, nr_ethanol, box_size, output_file_xyz, output_file_to
             molecules.append(f"{3*i} {3*i+1} {3*i+2} \n")
 
         for i in range(nr_ethanol):
+            print(f"{i}th ethanol molecule")
             random_displacement = np.random.uniform(0, box_size, (3))
             ethanol = np.asarray([_ethanol_patern[i] + random_displacement for i in range(9)])
 
             m = helper.atom_name_to_mass(_ethanol_atoms)
 
-            com = np.sum(np.array([m[i]*ethanol[i] for i in range(9)]), axis=1)/np.sum(m)
+            com = np.sum(np.array([m[i]*ethanol[i] for i in range(9)]), axis=0)/np.sum(m)
 
-            while check_placement(com, pos, box_size):
+            while check_placement(com, pos, box_size, tol_eth):
                 random_displacement = np.random.uniform(0, box_size, (3))
                 ethanol = np.asarray([_ethanol_patern[i] + random_displacement for i in range(9)])
-                com = np.sum(np.array([m[i]*ethanol[i] for i in range(9)]), axis = 1)/np.sum(m)
+                com = np.sum(np.array([m[i]*ethanol[i] for i in range(9)]), axis = 0)/np.sum(m)
 
             pos.append(com)
 
@@ -299,24 +344,24 @@ def create_dataset(nr_h20, nr_ethanol, box_size, output_file_xyz, output_file_to
 
             bonds.append(f"{9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 4626.50 0.945  \n")
 
-            angles.append(f"{9*i + 1 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} 292.88 1.8937 \n")
-            angles.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} 292.88 1.8937 \n")
-            angles.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} 292.88 1.8937 \n")
+            angles.append(f"{9*i + 1 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} 292.88 {helper.angle_to_radian(108.5)} \n")
+            angles.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} 292.88 {helper.angle_to_radian(108.5)} \n")
+            angles.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} 292.88 {helper.angle_to_radian(108.5)} \n")
 
-            angles.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 2 + 3*nr_h20} 276.144 1.8815 \n")
-            angles.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 1 + 3*nr_h20} 276.144 1.8815 \n")
-            angles.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 1 + 3*nr_h20} 276.144 1.8815 \n")
-            angles.append(f"{9*i + 5 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 276.144 1.8815 \n")
+            angles.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 2 + 3*nr_h20} 276.144 {helper.angle_to_radian(107.8)} \n")
+            angles.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 1 + 3*nr_h20} 276.144 {helper.angle_to_radian(107.8)} \n")
+            angles.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 1 + 3*nr_h20} 276.144 {helper.angle_to_radian(107.8)} \n")
+            angles.append(f"{9*i + 5 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 276.144 {helper.angle_to_radian(107.8)} \n")
 
-            angles.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 313.8 1.9321 \n")
-            angles.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 313.8 1.9321 \n")
+            angles.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 313.8 {helper.angle_to_radian(110.7)} \n")
+            angles.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 313.8 {helper.angle_to_radian(110.7)} \n")
 
-            angles.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 414.4 1.9111 \n")
+            angles.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 414.4 {helper.angle_to_radian(109.5)} \n")
 
-            angles.append(f"{9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 460.24 1.8937 \n")
+            angles.append(f"{9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 460.24 {helper.angle_to_radian(108.5)} \n")
 
-            angles.append(f"{9*i + 5 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 292.88 1.9111 \n")
-            angles.append(f"{9*i + 6 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 292.88 1.9111 \n")
+            angles.append(f"{9*i + 5 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 292.88 {helper.angle_to_radian(109.5)} \n")
+            angles.append(f"{9*i + 6 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 292.88 {helper.angle_to_radian(109.5)}\n")
 
 
             LJ.append(f"{9*i + 3*nr_h20} 3.5 0.276144 \n")
@@ -381,9 +426,9 @@ def distance(pos_1, pos_2, box_length):
     return helper.norm(x,y,z)
 
 
-def check_placement(molecule, pos, box):
+def check_placement(molecule, pos, box, tol):
     for com in pos:
-        if distance(molecule, com, box) < 3:
+        if distance(molecule, com, box) < tol:
             return True
 
     return False
@@ -393,10 +438,14 @@ if __name__ == "__main__":
     #pos, atom_names, atoms = read_xyz("data/water_top.xyz")
     #bonds, const_bonds, angles, const_angles, lj, const_lj, molecules = read_topology("data/top.itp")  
 
-    nr_h20 = 1
-    nr_ethanol = 0
-    box_size = 2
-    output_file_xyz = "data/water_small.xyz"
-    output_file_top = "data/water_small.itp"
+    nr_h20 = 0
+    tol_h20 = 3
+    nr_ethanol = 1
+    tol_eth = 10  
+    box_size = 5 
+    output_file_xyz = "data/ethanol.xyz"
+    output_file_top = "data/ethanol.itp"
 
-    create_dataset(nr_h20, nr_ethanol, box_size, output_file_xyz, output_file_top)
+    create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
+
+    #radial_distribution_function("data/rdf.xyz", 0.2, box_size = 50)
