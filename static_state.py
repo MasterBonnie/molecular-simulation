@@ -32,13 +32,10 @@ def kinetic_energy(v, m):
     """
     Computes the kinetic energy of the system
     """
-    #print(v)
     dot = np.einsum('ij,ij->i', v, v)
-    #print(dot)
     summands = np.multiply(dot, m)
     cf = 1.6605*6.022e-1 
     return cf*0.5*np.sum(summands)
-    #return 0.5*np.sum(summands)
 
 def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
                     box_size):
@@ -92,16 +89,6 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
         k = pos[dihedrals[:,2]]
         l = pos[dihedrals[:,3]]
 
-        # old iterations of the dihedral angle:
-
-        #dihedral_angle = angle_between(i - j, k - l)
-        #psi = dihedral_angle - np.pi 
-        #np.sign(np.einsum('ij,ij->i', k-j, cross(f_i, f_l)))*
-        #psi = angle_between(f_i, f_l) - np.pi
-        
-        #psi = np.sign(np.einsum('ij,ij->i', i-j, f_l))*angle_between(unit_vector((i - j) - (np.einsum('ij,ij->i', l - k, unit_vector(k-j)))[:, np.newaxis]*unit_vector(k-j)), 
-        #                    unit_vector((i - j) - (np.einsum('ij,ij->i', i - j, unit_vector(k-j)))[:, np.newaxis]*unit_vector(k-j))) - np.pi
-
         # Using https://www.rug.nl/research/portal/files/3251566/c5.pdf
         # Equations (5.3a) for the dihederal angle
 
@@ -121,7 +108,7 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
         energy += np.sum(energy_dihedral)
     else:
         energy_dihedral = np.array([])
-    # print(energy)
+
     return energy, np.sum(energy_bond), np.sum(energy_angle), np.sum(energy_dihedral)
 
 #https://gist.github.com/ufechner7/98bcd6d9915ff4660a10
@@ -255,9 +242,6 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
         f_i = cross(i - j, k - j)
         f_l = cross(k - j, k - l)
 
-        # Middle of bond jk
-        o = (j+k)/2.0
-
         # The einsum takes the row-wise inner product of a matrix
         sign_angle = np.sign(np.einsum('ij,ij->i', i-j, f_l))
 
@@ -280,9 +264,10 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
 
         # To check if the calculations are correct
         # This is indeed 0 when running the simulation
-        torque = cross(i - o, force_i) + cross(j - o, force_j) + cross(k - o, force_k) + cross(l - o, force_l)
 
-        #print(force_i)
+        # Middle of bond jk
+        #o = (j+k)/2.0
+        #torque = cross(i - o, force_i) + cross(j - o, force_j) + cross(k - o, force_k) + cross(l - o, force_l)
 
         np.add.at(force_total, dihedrals[:,0], force_i)
         np.add.at(force_total, dihedrals[:,1], force_j)
@@ -322,47 +307,3 @@ if __name__ == "__main__":
     # calculate_displacement(com, box_size, np.zeros(com.shape))
     # project_pos(com, box_size, pos, molecules)
     
-    p = m[:, np.newaxis]*pos
-    print(p)
-
-
-        # ji = i - j
-        # lk = k - l
-
-        # f_i_unit = unit_vector(cross(i - j, k - j))
-        # f_l_unit = unit_vector(cross(l - k, j - k))
-
-        # dihedral_angle = angle_between(f_i_unit, f_l_unit)
-        # psi = dihedral_angle - np.pi
-
-        # c = (j + k)/2.0
-
-        # ijk = angle_between(i - j, k - j)
-        # # CHANGED L-K to K - L
-        # jkl = angle_between(j - k, l - k)
-
-        # C_1 = const_dihedrals[:,0]
-        # C_2 = const_dihedrals[:,1]
-        # C_3 = const_dihedrals[:,2]
-        # C_4 = const_dihedrals[:,3]
-        # magnitude = 0.5*(C_1*np.sin(psi) - 2*C_2*np.sin(2*psi) + 3*C_3*np.sin(3*psi) - 4*C_4*np.sin(4*psi))
-
-
-        # # f_i_unit = unit_vector(cross(j - i, k - j))
-        # # f_l_unit = unit_vector(cross(l - k, k - j))
-
-
-        # force_i = (magnitude/(np.linalg.norm(j - i, axis=1)*np.sin(ijk)))[:, np.newaxis]*f_i_unit     
-        # force_l = (magnitude/(np.linalg.norm(k - l, axis=1)*np.sin(jkl)))[:, np.newaxis]*f_l_unit
-        # force_k = (1/(np.linalg.norm(k - c, axis=1)**2))[:, np.newaxis]*cross(-1.0*(cross(k-c, force_l) + 0.5*cross(l - k, force_l) + 0.5*cross(i-j, force_i)), k - c)
-        # force_j = -(force_i + force_l + force_k)
-
-        
-        # #torque = cross(i - c, force_i) + cross(j - c, force_j) + cross(k - c, force_k) + cross(l - c, force_l)
-        # #print(torque)
-        # #print(force_i + force_j + force_l + force_k)
-
-        # np.add.at(force_total, dihedrals[:,0], force_i)
-        # np.add.at(force_total, dihedrals[:,1], force_j)
-        # np.add.at(force_total, dihedrals[:,2], force_k)
-        # np.add.at(force_total, dihedrals[:,3], force_l)

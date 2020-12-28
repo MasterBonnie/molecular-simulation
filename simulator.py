@@ -111,10 +111,6 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
         f = cf*compute_force(pos, bonds, const_bonds, angles,
                         const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms, box_size)
 
-        #print("initial energy")
-        #print(potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
-        #                box_size) + kinetic_energy(v,m))
-
         while t < T:
             io_sim.printProgressBar(progress, total_progress)
 
@@ -158,19 +154,11 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
             progress += 1
 
             # I/O operations
-            
-            #print("Potential: ", end="")
-            #print(potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
-            #        box_size))
-            #print("Kinetic: ", end="")
-            #print(kinetic_energy(v,m))
-
-            #print("Total: ", end="")
             energy_kinetic = kinetic_energy(v,m)
             energy_potential, energy_bond, energy_angle, energy_dihedral = potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
                     box_size)
             energy_total = energy_kinetic + energy_potential
-            #print(energy_total)
+
             obs_file.write(f"{energy_potential}, {energy_kinetic}, {energy_total}, {energy_bond}, {energy_angle}, {energy_dihedral} \n")
 
             if write_output:
@@ -181,8 +169,6 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
                     output_file.write(atom_string(atoms[atom_name], atom))
 
     return
-
-    
 
 def phase_space_h(pos, v, f, obs_file):
     """
@@ -216,14 +202,5 @@ if __name__ == "__main__":
     integrator = "vv"
     write_output = True
 
-    # Hydrogen file
-    # m = np.array([1.00784, 1.00784]) # amu
-    # dt = 0.001 # 0.1 ps
-    # T = 1 # 0.1 ps
-    # file_xyz = "data/hydrogen_top.xyz"
-    # file_top = "data/hydrogen_top.itp"
-    # file_out = "output/result_h2.xyz"
-    # file_observable = "output/result_phase.csv"
-    # observable_function = phase_space_h
     #cProfile.run("integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, observable_function, integrator, write_output)")
     integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, observable_function, integrator, write_output)

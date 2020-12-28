@@ -19,7 +19,6 @@ def unit_vector(matrix_):
     Returns the unit vector of the vector.  
     if input is matrix does this for each row.
     """
-    # OLD return vector / np.linalg.norm(vector)
     return matrix_/np.linalg.norm(matrix_, ord=2, axis=1, keepdims=True)
 
 
@@ -53,7 +52,6 @@ def atom_string(atom, pos):
     returns string format correct for xyz file
     """
     return f"{atom} {pos[0]} {pos[1]} {pos[2]} \n"
-    #return atom + " " +  np.array2string(pos, separator=" ")[1:-1] + "\n"   
 
 def atom_name_to_mass(atoms):
     """ converts an atom name to its mass"""
@@ -132,11 +130,8 @@ def distance_PBC_matrix(diff, box_length, res):
         box_length: length of the PBC box, in A
         res: (n,n) array which will be filled with the distances
 
-    # TODO: rewrite this back to a numba function (this is also the reason for no return statement)
     # TODO: combine this with the function below
     """
-
-    #diff = np.mod(diff, box_length)
 
     for i in range(diff.shape[0]):
         for j in range(diff.shape[0]):
@@ -171,8 +166,6 @@ def distance_PBC(pos_1, pos_2, box_length, res, diff):
         diff: array which will be filled with the difference vectors
 
     """
-    #pos_1 = np.mod(pos_1, box_length)
-    #pos_2 = np.mod(pos_2, box_length)
 
     for i in range(diff.shape[0]):
         x = abs_min(pos_1[i][0] - pos_2[i][0], pos_1[i][0]  - pos_2[i][0] + box_length, pos_1[i][0]  - pos_2[i][0] - box_length)  
@@ -189,94 +182,4 @@ def distance_PBC(pos_1, pos_2, box_length, res, diff):
         res[i] = norm(x,y,z)
 
 if __name__ == "__main__":
-    _ethanol_patern = np.array([
-                        [0.826028, -0.40038, -0.826028],
-                        [1.42445, -1.03723, -0.171629],
-                        [1.49617, 0.1448, -1.49617],
-                        [0.171629, -1.03723, -1.42445],
-                        [0.0, 0.55946, 0.0],
-                        [-0.597, 1.20751, -0.657249],
-                        [0.657249, 1.20751, 0.59706],
-                        [-0.841514, -0.22767, 0.841514],
-                        [-1.37647, 0.38153, 1.37647]
-                            ])
-
-    dihedrals = np.array([[1,0,3,5],
-                 [2,0,3,5]])
-
-    print(dihedrals[:,0])
-
-    dihedral = _ethanol_patern
-    i = dihedral[dihedrals[:,0]]
-    j = dihedral[dihedrals[:,1]]
-    k = dihedral[dihedrals[:,2]]
-    l = dihedral[dihedrals[:,3]]
-
-    ji = i - j
-    lk = k - l
-
-    dihedral_angle = angle_between(ji, lk)
-    psi = dihedral_angle - np.pi
-
-    c = (j+k)/2.0
-
-    ijk = angle_between(i - j, k - j)
-    jkl = angle_between(j - k, l - k)
-
-    C_1 = np.array([1.0, 2.0])
-    C_2 = np.array([1.0, 2.0])
-    C_3 = np.array([1.0, 2.0])
-    C_4 = np.array([1.0, 2.0])
-    magnitude = 0.5*(C_1*np.sin(psi) - 2*C_2*np.sin(2*psi) + 3*C_3*np.cos(3*psi) - 4*C_4*np.sin(4*psi))
-
-
-    # Force on atom i in dihedral angle
-    f_i_unit = unit_vector(static_state.cross(j - i, k - j))
-    f_l_unit = unit_vector(static_state.cross(l - k, k - j))
-
-    f_i = (magnitude/(np.linalg.norm(j - i, axis=1)*np.sin(ijk)))[:, np.newaxis]*f_i_unit     
-    f_l = (magnitude/(np.linalg.norm(k - l, axis=1)*np.sin(jkl)))[:, np.newaxis]*f_l_unit
-
-    f_k = -(1/(np.linalg.norm(k - c, axis=1)**2))[:, np.newaxis]*static_state.cross(static_state.cross(k-c, f_l) + 0.5*static_state.cross(l - k, f_l) + 0.5*static_state.cross(i-j, f_i), k - c)
-
-    f_j = -(f_i + f_l + f_k)
-
-    torque = static_state.cross(i - c, f_i) + static_state.cross(j - c, f_j) + static_state.cross(k - c, f_k) + static_state.cross(l - c, f_l)
-    print(torque)
-    print(f_i + f_j + f_l + f_k)
-
-
-
-
-    # ji = i - j
-    # lk = k - l
-
-    # dihedral_angle = angle_between(np.array([ji]), np.array([lk]))
-    # psi = dihedral_angle - np.pi
-
-    # c = (j+k)/2.0
-
-    # ijk = angle_between(np.array([i - j]), np.array([k - j]))
-    # jkl = angle_between(np.array([j - k]), np.array([l - k]))
-
-    # C_1 = 1
-    # C_2 = 1
-    # C_3 = 1
-    # C_4 = 1
-    # magnitude = 0.5*(C_1*np.sin(psi) - 2*C_2*np.sin(2*psi) + 3*C_3*np.cos(3*psi) - 4*C_4*np.sin(4*psi))
-
-
-    # # Force on atom i in dihedral angle
-    # f_i_unit = unit_vector(static_state.cross(np.array([j - i]), np.array([k - j])))
-    # f_l_unit = unit_vector(static_state.cross(np.array([l - k]), np.array([k - j])))
-
-    # f_i = (magnitude/(np.linalg.norm(j - i)*np.sin(ijk)))*f_i_unit     
-    # f_l = (magnitude/(np.linalg.norm(k - l)*np.sin(jkl)))*f_l_unit
-
-    # f_k = -(1/(np.linalg.norm(k-c)**2))*static_state.cross(static_state.cross(np.array([k-c]), f_l) + 0.5*static_state.cross(np.array([l - k]), f_l) + 0.5*static_state.cross(np.array([i-j]), f_i), np.array([k-c]))
-
-    # f_j = -(f_i + f_l + f_k)
-
-    # torque = static_state.cross(np.array([i - c]), f_i) + static_state.cross(np.array([j - c]), f_j) + static_state.cross(np.array([k - c]), f_k) + static_state.cross(np.array([l - c]), f_l)
-    # print(torque)
-    # print(f_i + f_j + f_l + f_k)
+    pass
