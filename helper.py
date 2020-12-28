@@ -34,8 +34,8 @@ def angle_between(v1, v2):
     dot = np.einsum('ij,ij->i', v1, v2)
 
     # We then get the angle from this
-    #ang = np.arccos(np.clip(dot, -1.0,1.0))
-    return np.arccos(dot)
+    ang = np.arccos(np.clip(dot, -1.0,1.0))
+    return ang
 
 def random_unit_vector(const = 1):
     """

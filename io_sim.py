@@ -60,11 +60,14 @@ def read_xyz(input):
 
     return pos, atom_names, atoms
 
-def radial_distribution_function(file, dr, box_size):
+def radial_distribution_function(xyz_file, top_file, dr, box_size):
     """
     Calculates the radial distribution function for a given xyz file
+    Needs an associated topology file
     """
-    with open(file, "r") as input_file:    
+    bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals = read_topology(top_file)
+
+    with open(xyz_file, "r") as input_file:    
         while True:   
             line = input_file.readline()
 

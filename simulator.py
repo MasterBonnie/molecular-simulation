@@ -72,7 +72,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
     molecule_to_atoms = create_list(molecules)
 
     # Random initial velocity
-    v = 3*unit_vector(np.random.uniform(size=[nr_atoms,3]))
+    v = 0*unit_vector(np.random.uniform(size=[nr_atoms,3]))
 
     # Open the output file
     with open(file_out, "w") as output_file, open(file_observable, "w") as obs_file:
@@ -116,7 +116,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
         #                box_size) + kinetic_energy(v,m))
 
         while t < T:
-            #io_sim.printProgressBar(progress, total_progress)
+            io_sim.printProgressBar(progress, total_progress)
 
             # if we want to calculate something
             if observable_function:
@@ -205,7 +205,7 @@ if __name__ == "__main__":
 
     # Water file
     dt = 0.001 # 0.1 ps
-    T = 0.1 # 10^-13 s
+    T = 10  # 10^-13 s
     r_cut = 8 # A
     box_size = 5 # A
     file_xyz = "data/ethanol.xyz"

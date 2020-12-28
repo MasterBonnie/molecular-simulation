@@ -106,9 +106,12 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
         # Equations (5.3a) for the dihederal angle
 
         f_l = cross(k - j, k - l)
+        sign_angle = np.sign(np.einsum('ij,ij->i', i-j, f_l))
 
-        psi = np.sign(np.einsum('ij,ij->i', i-j, f_l))*angle_between(unit_vector((i - j) - (np.einsum('ij,ij->i', l - k, unit_vector(k-j)))[:, np.newaxis]*unit_vector(k-j)), 
-                            unit_vector((i - j) - (np.einsum('ij,ij->i', i - j, unit_vector(k-j)))[:, np.newaxis]*unit_vector(k-j))) - np.pi
+        R = (i - j) - np.einsum('ij,ij->i', i-j, unit_vector(k - j))[:, np.newaxis]*unit_vector(k - j)
+        S = (l - k) - np.einsum('ij,ij->i', l-k, unit_vector(k - j))[:, np.newaxis]*unit_vector(k - j)
+
+        psi = sign_angle*angle_between(R,S) - np.pi
         
         C_1 = const_dihedrals[:,0]
         C_2 = const_dihedrals[:,1]
@@ -231,7 +234,7 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     # Forces due to dihedral angles
     #----------------------------------
     if dihedrals is not None:
-        
+        # pass
         # Using https://www.rug.nl/research/portal/files/3251566/c5.pdf
         # Equations (5.11), (5.12), (5.21) and (5.22) and (5.3a) for the
         # dihederal angle
@@ -256,14 +259,19 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
         o = (j+k)/2.0
 
         # The einsum takes the row-wise inner product of a matrix
-        psi = np.sign(np.einsum('ij,ij->i', i-j, f_l))*angle_between(unit_vector((i - j) - (np.einsum('ij,ij->i', l - k, unit_vector(k-j)))[:, np.newaxis]*unit_vector(k-j)), 
-                            unit_vector((i - j) - (np.einsum('ij,ij->i', i - j, unit_vector(k-j)))[:, np.newaxis]*unit_vector(k-j))) - np.pi     
+        sign_angle = np.sign(np.einsum('ij,ij->i', i-j, f_l))
+
+        R = (i - j) - np.einsum('ij,ij->i', i-j, unit_vector(k - j))[:, np.newaxis]*unit_vector(k - j)
+        S = (l - k) - np.einsum('ij,ij->i', l-k, unit_vector(k - j))[:, np.newaxis]*unit_vector(k - j)
+
+        psi = sign_angle*angle_between(R,S) - np.pi  
 
         # Derivative of the potential 
         magnitude = -0.5*(C_1*np.sin(psi) - 2*C_2*np.sin(2*psi) + 3*C_3*np.sin(3*psi) - 4*C_4*np.sin(4*psi))
+        #print(magnitude)
 
-        force_i = -(magnitude/(np.linalg.norm(k - j, axis=1)*(np.linalg.norm(f_i, axis=1)**2)))[:, np.newaxis]*f_i
-        force_l = (magnitude/(np.linalg.norm(k - j, axis=1)*(np.linalg.norm(f_l, axis=1)**2)))[:, np.newaxis]*f_l
+        force_i = -(magnitude*np.linalg.norm(k - j, axis=1)/(np.linalg.norm(f_i, axis=1)))[:, np.newaxis]*unit_vector(f_i)
+        force_l =  (magnitude*np.linalg.norm(k - j, axis=1)/(np.linalg.norm(f_l, axis=1)))[:, np.newaxis]*unit_vector(f_l)
 
         term = np.reciprocal(np.linalg.norm(j - k, axis=1)**2)[:, np.newaxis]*(np.einsum('ij,ij->i', i-j, k-j)[:, np.newaxis]*force_i - np.einsum('ij,ij->i', k - l, k - j)[:, np.newaxis]*force_l)
 
@@ -273,6 +281,8 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
         # To check if the calculations are correct
         # This is indeed 0 when running the simulation
         torque = cross(i - o, force_i) + cross(j - o, force_j) + cross(k - o, force_k) + cross(l - o, force_l)
+
+        #print(force_i)
 
         np.add.at(force_total, dihedrals[:,0], force_i)
         np.add.at(force_total, dihedrals[:,1], force_j)
