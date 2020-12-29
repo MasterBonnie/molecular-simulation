@@ -91,12 +91,12 @@ def create_list(molecules):
     # NOTE: inefficient double loop, but we only call this once so it is
             not that bad
     """
-    matrix = [[0 for j in range(molecules.shape[0])] for i in range(molecules.shape[0])]
+    matrix = [[0 for j in range(len(molecules))] for i in range(len(molecules))]
 
-    for i in range(molecules.shape[0]):
-        for j in range(molecules.shape[0]):
+    for i in range(len(molecules)):
+        for j in range(len(molecules)):
             if j > i:
-                matrix[i][j] = cartesianprod(molecules[i], molecules[j])
+                matrix[i][j] = cartesianprod(np.array(molecules[i], dtype=np.int), np.array(molecules[j], dtype=np.int))
 
     return matrix
 

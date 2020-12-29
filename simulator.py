@@ -7,7 +7,7 @@ import cProfile
 import io_sim
 from helper import atom_string, random_unit_vector, unit_vector, angle_between, atom_name_to_mass, cartesianprod, create_list, neighbor_list, distance_PBC
 import integrators
-from static_state import centre_of_mass, compute_force, project_pos, kinetic_energy, potential_energy
+from static_state import centre_of_mass, compute_force, project_pos, kinetic_energy, potential_energy, temperature
 
 def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, 
                 observable_function = None, integrator="vv", write_output = True):
@@ -45,6 +45,9 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
     # Progress bar variables
     total_progress = int(T/dt)
     progress = 1
+    
+    # Desired temperature 
+    T_desired = 273 #kelvin
 
     # Converts our force units to the force 
     # with unit amu A (0.1ps)^-2
@@ -72,7 +75,13 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
     molecule_to_atoms = create_list(molecules)
 
     # Random initial velocity
-    v = 0*unit_vector(np.random.uniform(size=[nr_atoms,3]))
+    v = unit_vector(np.random.uniform(size=[nr_atoms,3]))
+    energy_kinetic = kinetic_energy(v,m)
+
+    temp = temperature(energy_kinetic,nr_atoms)
+    Lambda = np.sqrt(T_desired/temp)
+
+    v = Lambda*v
 
     # Open the output file
     with open(file_out, "w") as output_file, open(file_observable, "w") as obs_file:
@@ -159,6 +168,11 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
                     box_size)
             energy_total = energy_kinetic + energy_potential
 
+            temp = temperature(energy_kinetic,nr_atoms)
+            Lambda = np.sqrt(T_desired/temp)
+
+            v = Lambda*v
+
             obs_file.write(f"{energy_potential}, {energy_kinetic}, {energy_total}, {energy_bond}, {energy_angle}, {energy_dihedral} \n")
 
             if write_output:
@@ -190,12 +204,12 @@ def phase_space_h(pos, v, f, obs_file):
 if __name__ == "__main__":
 
     # Water file
-    dt = 0.001 # 0.1 ps
-    T = 10  # 10^-13 s
+    dt = 0.02 # 0.1 ps
+    T = 100  # 10^-13 s
     r_cut = 8 # A
-    box_size = 5 # A
-    file_xyz = "data/ethanol.xyz"
-    file_top = "data/ethanol.itp"
+    box_size = 50 # A
+    file_xyz = "data/mix.xyz"
+    file_top = "data/mix.itp"
     file_out = "output/result.xyz"
     file_observable = "output/result_phase.csv"
     observable_function = None  

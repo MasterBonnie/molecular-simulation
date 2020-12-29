@@ -22,8 +22,9 @@ def centre_of_mass(pos, m, molecules):
     """
     centre_of_mass = np.zeros((len(molecules), 3))
     for i, molecule in enumerate(molecules):
-        M = np.sum(m[molecule])
-        Mpos = np.sum(m[molecule, np.newaxis]*pos[molecule], axis = 0)
+        molecule_np = np.array(molecule, dtype=np.int)
+        M = np.sum(m[molecule_np])
+        Mpos = np.sum(m[molecule_np, np.newaxis]*pos[molecule_np], axis = 0)
         centre_of_mass[i] = Mpos/M
 
     return centre_of_mass
@@ -294,7 +295,13 @@ def project_pos(centres_of_mass, box_size, pos, molecules):
     calculate_displacement(centres_of_mass, box_size, displacement)
 
     for i, molecule in enumerate(molecules):
-        pos[molecule] += displacement[i]
+        molecule_np = np.array(molecule, dtype=np.int)
+        pos[molecule_np] += displacement[i]
+
+def temperature(Ekin,N):
+    conversion = 3*1.3806*6.022/1000
+    T = Ekin/(N*conversion)
+    return T
 
 if __name__ == "__main__":
     pos = np.array([[1.,1.,1.],

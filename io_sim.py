@@ -185,7 +185,7 @@ def read_topology(input):
             line = line.split()
             molecules.append(line)
         
-        molecules = np.asarray(molecules, dtype=np.int)
+        #molecules = np.asarray(molecules, dtype=np.int)
 
         line = inputfile.readline()
 
@@ -289,17 +289,16 @@ def create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_x
                                _water_patern[1] + random_displacement,
                                _water_patern[2] + random_displacement]) 
 
-            com = (15.999*water[0] + water[1] + water[2])/16.
 
-            while check_placement(com, pos, box_size, tol_h20):
+            while check_placement_per_atom(water, pos, box_size, tol_h20):
                 random_displacement = np.random.uniform(0, box_size, (3))
                 water = np.asarray([_water_patern[0] + random_displacement,
                                _water_patern[1] + random_displacement,
                                _water_patern[2] + random_displacement]) 
 
-                com = (15.999*water[0] + water[1] + water[2])/16.
-
-            pos.append(com)
+            for atom in water:
+                pos.append(atom)
+            
 
             for j, atom in enumerate(_water_atoms):
                 xyz_file.write(helper.atom_string(atom, water[j]))
@@ -319,16 +318,13 @@ def create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_x
             random_displacement = np.random.uniform(0, box_size, (3))
             ethanol = np.asarray([_ethanol_patern[i] + random_displacement for i in range(9)])
 
-            m = helper.atom_name_to_mass(_ethanol_atoms)
 
-            com = np.sum(np.array([m[i]*ethanol[i] for i in range(9)]), axis=0)/np.sum(m)
-
-            while check_placement(com, pos, box_size, tol_eth):
+            while check_placement_per_atom(ethanol, pos, box_size, tol_eth):
                 random_displacement = np.random.uniform(0, box_size, (3))
                 ethanol = np.asarray([_ethanol_patern[i] + random_displacement for i in range(9)])
-                com = np.sum(np.array([m[i]*ethanol[i] for i in range(9)]), axis = 0)/np.sum(m)
 
-            pos.append(com)
+            for atom in ethanol:
+                pos.append(atom)
 
             for j, atom in enumerate(_ethanol_atoms):
                 xyz_file.write(helper.atom_string(atom, ethanol[j]))
@@ -436,18 +432,25 @@ def check_placement(molecule, pos, box, tol):
 
     return False
 
+def check_placement_per_atom(molecule, pos, box, tol):
+    for com in pos:
+        for atom in molecule:
+            if distance(atom, com, box) < tol:
+                return True
+    return False
+
 # Testing of the functions
 if __name__ == "__main__":
     #pos, atom_names, atoms = read_xyz("data/water_top.xyz")
     #bonds, const_bonds, angles, const_angles, lj, const_lj, molecules = read_topology("data/top.itp")  
 
-    nr_h20 = 0
+    nr_h20 = 100
     tol_h20 = 3
-    nr_ethanol = 1
-    tol_eth = 10  
-    box_size = 5 
-    output_file_xyz = "data/ethanol.xyz"
-    output_file_top = "data/ethanol.itp"
+    nr_ethanol = 50
+    tol_eth = 3
+    box_size = 50 
+    output_file_xyz = "data/mix.xyz"
+    output_file_top = "data/mix.itp"
 
     create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
 
