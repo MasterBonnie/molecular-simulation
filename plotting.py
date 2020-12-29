@@ -29,5 +29,12 @@ def plot_debugging(file):
     plt.xlabel("T (10^-13 s)")
     plt.show()
 
+    plt.plot(data[:, 6])
+    plt.legend(["Temperature"])
+    plt.title("Temperature distribution")
+    plt.ylabel("K (K)")
+    plt.xlabel("T (10^-13 s)")
+    plt.show()
+
 if __name__ == "__main__":
     plot_debugging("output/result_phase.csv")

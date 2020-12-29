@@ -65,7 +65,42 @@ def radial_distribution_function(xyz_file, top_file, dr, box_size):
     Calculates the radial distribution function for a given xyz file
     Needs an associated topology file
     """
-    bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals = read_topology(top_file)
+    # What atoms are in which molecules
+    _, _, _, _, _, _, molecules, _, _ = read_topology(top_file)
+
+    # Determine indices of oxygen atoms in ethanol and water
+    water_o = []
+    ethanol_o = []
+    for molecule in molecules:
+        if len(molecule) == 3:
+            # If len is three we are in water
+            water_o.append(molecule[0])
+        elif len(molecule) == 9:
+            # We are in ethanol molecule
+            ethanol_o.append(molecule[7])
+    
+    water_o = np.array(water_o, dtype=np.int)
+    ethanol_o = np.array(ethanol_o, dtype=np.int)
+
+    constraint_rdf = True
+
+    # Over which molecules we want to take averages
+    reference_atoms = [3*i for i in range(500)]
+
+    # Define r here
+    r = 9
+
+    # Number of bins
+    n = 1000    
+
+    # List of distances:
+    distances = [(1+(i+1)*r/n, 1+(i+1)*r/n + dr) for i in range(n)]
+
+    total_rdf = np.zeros((n))
+
+    iteration = 0
+    begin = 1000
+    end = 1030
 
     with open(xyz_file, "r") as input_file:    
         while True:   
@@ -89,19 +124,53 @@ def radial_distribution_function(xyz_file, top_file, dr, box_size):
                 splittedLine = line.split()
                 pos[i] = np.asarray(splittedLine[1:], np.float)
                 atom_names.append(splittedLine[0])
+
+            if iteration > begin and iteration < end:
+                print(iteration)
+                # We now have all positions for this timestep
+                # We loop over the reference molecules and
+                # calculate their rdf
+                rdf = np.zeros((n))
+
+                # Total density:
+                if constraint_rdf:
+                    density = nr_atoms/(3*(box_size**3))
+                else:
+                    density = nr_atoms/(box_size**3)
+                i = 0
+                for lower, upper in distances:
+                    print(i, end="\r")
+                    # Number of atoms in this range
+
+                    for reference_atom in reference_atoms:
+                        if not constraint_rdf:
+                            reference_position = np.ones((nr_atoms, 3))*pos[reference_atom]
+                            dis = np.zeros((nr_atoms))
+                            diff = np.zeros((nr_atoms, 3))
+                            helper.distance_PBC(reference_position, pos, box_size, dis, diff)  
+                        elif constraint_rdf:
+                            reference_position = np.ones((water_o.shape[0], 3))*pos[reference_atom]
+                            dis = np.zeros((water_o.shape[0]))
+                            diff = np.zeros((water_o.shape[0], 3))
+                            helper.distance_PBC(reference_position, pos[water_o], box_size, dis, diff) 
+
+                        nr = np.sum((lower < dis) & (dis < upper))
+                        rdf[i] += nr
+                    
+                    rdf[i] = rdf[i] / len(reference_atoms)
+                    rdf[i] = rdf[i] / ((4*np.pi/3)*(upper**3-lower**3))
+                    rdf[i] = rdf[i] / density
+
+                    i = i + 1
+                    
+                print()
+                total_rdf += rdf
             
-            reference_position = np.ones((nr_atoms, 3))*pos[0]
-            res = np.zeros((nr_atoms))
-            diff = np.zeros((nr_atoms, 3))
-            helper.distance_PBC(reference_position, pos, box_size, res, diff)
+            iteration += 1
 
-            histo = np.histogram(res, np.arange(0, box_size + dr, dr))[0]
-            histo = histo/(nr_atoms*box_size**3)
-            cf = np.array([(4*np.pi/3)*(((i+1)*dr)**3-(i*dr)**3) for i in range(int(box_size/dr))])
-            histo = histo*cf
-
-            plt.plot(histo)
-            plt.show()
+        total_rdf = total_rdf/(end - begin)
+        plt.plot([distance[0] for distance in distances], total_rdf)
+        plt.show()
 
 
 def read_topology(input):
@@ -444,14 +513,14 @@ if __name__ == "__main__":
     #pos, atom_names, atoms = read_xyz("data/water_top.xyz")
     #bonds, const_bonds, angles, const_angles, lj, const_lj, molecules = read_topology("data/top.itp")  
 
-    nr_h20 = 100
-    tol_h20 = 3
-    nr_ethanol = 50
+    nr_h20 = 1000
+    tol_h20 = 1.5
+    nr_ethanol = 0
     tol_eth = 3
     box_size = 50 
-    output_file_xyz = "data/mix.xyz"
-    output_file_top = "data/mix.itp"
+    output_file_xyz = "data/rdf_test.xyz"
+    output_file_top = "data/rdf_test.itp"
 
     create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
 
-    #radial_distribution_function("data/rdf.xyz", 0.2, box_size = 50)
+    #radial_distribution_function("output/result.xyz", "data/water.itp", 0.05, box_size = 50)

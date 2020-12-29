@@ -47,7 +47,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
     progress = 1
     
     # Desired temperature 
-    T_desired = 273 #kelvin
+    T_desired = 298.5 #kelvin
 
     # Converts our force units to the force 
     # with unit amu A (0.1ps)^-2
@@ -173,7 +173,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
 
             v = Lambda*v
 
-            obs_file.write(f"{energy_potential}, {energy_kinetic}, {energy_total}, {energy_bond}, {energy_angle}, {energy_dihedral} \n")
+            obs_file.write(f"{energy_potential}, {energy_kinetic}, {energy_total}, {energy_bond}, {energy_angle}, {energy_dihedral}, {temp} \n")
 
             if write_output:
                 output_file.write(f"{nr_atoms}" + '\n')
@@ -208,8 +208,8 @@ if __name__ == "__main__":
     T = 100  # 10^-13 s
     r_cut = 8 # A
     box_size = 50 # A
-    file_xyz = "data/mix.xyz"
-    file_top = "data/mix.itp"
+    file_xyz = "data/water.xyz"
+    file_top = "data/water.itp"
     file_out = "output/result.xyz"
     file_observable = "output/result_phase.csv"
     observable_function = None  
