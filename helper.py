@@ -1,15 +1,37 @@
 import numpy as np
-from numba import vectorize, float64, jit, guvectorize
+from numba import vectorize, float64, jit, guvectorize, int32
 import math
 #import static_state
 
 """ helper/misc. functions and constants """
 
-_atom_mass = {
+atom_mass = {
     "O": 15.999,
     "H": 1.00784,
     "C": 12.011
 }
+
+water_patern = np.array([
+                          [1.93617934,      2.31884508,      1.72261570],
+                          [1.78931374,      3.24075634,      1.51114298],
+                          [2.30448689,      1.98045541,      0.90160232]
+                           ])
+
+water_atoms = ["O", "H", "H"]
+
+ethanol_patern = np.array([
+                        [0.826028, -0.40038, -0.826028],
+                        [1.42445, -1.03723, -0.171629],
+                        [1.49617, 0.1448, -1.49617],
+                        [0.171629, -1.03723, -1.42445],
+                        [0.0, 0.55946, 0.0],
+                        [-0.597, 1.20751, -0.657249],
+                        [0.657249, 1.20751, 0.59706],
+                        [-0.841514, -0.22767, 0.841514],
+                        [-1.37647, 0.38153, 1.37647]
+                            ])
+
+ethanol_atoms = ["C","H","H","H","C","H","H","O","H"]
 
 def angle_to_radian(angle):
     return (angle*np.pi)/180.0
@@ -20,7 +42,6 @@ def unit_vector(matrix_):
     if input is matrix does this for each row.
     """
     return matrix_/np.linalg.norm(matrix_, ord=2, axis=1, keepdims=True)
-
 
 def angle_between(v1, v2):
     """ 
@@ -55,14 +76,17 @@ def atom_string(atom, pos):
 
 def atom_name_to_mass(atoms):
     """ converts an atom name to its mass"""
-    mass = [_atom_mass[atom] for atom in atoms]
+    mass = [atom_mass[atom] for atom in atoms]
     return np.array(mass)
 
-# TODO: faster version on stackoverflow? 
+@jit(nopython=True, cache=True)
 def cartesianprod(x,y):
-    """ returns cartesian product of lists x and y"""
-    Cp = np.transpose([np.tile(x, len(y)), np.repeat(y, len(x))])
-    return Cp    
+    res = np.zeros((x.shape[0]*y.shape[0],2), dtype=int32)
+
+    for i in range(x.shape[0]):
+        for j in range(y.shape[0]):
+            res[i*x.shape[0] + j] = np.array([x[i],y[j]], dtype=int32)
+    return res
 
 def neighbor_list(pos, molecule_to_atoms, centre_of_mass, r_cut, box_size):
     """
@@ -94,6 +118,7 @@ def create_list(molecules):
     matrix = [[0 for j in range(len(molecules))] for i in range(len(molecules))]
 
     for i in range(len(molecules)):
+        print(f"working on creating list...  {(100*i)//(len(molecules))} %        ", end="\r")
         for j in range(len(molecules)):
             if j > i:
                 matrix[i][j] = cartesianprod(np.array(molecules[i], dtype=np.int), np.array(molecules[j], dtype=np.int))
@@ -130,7 +155,7 @@ def distance_PBC_matrix(diff, box_length, res):
         box_length: length of the PBC box, in A
         res: (n,n) array which will be filled with the distances
 
-    # TODO: combine this with the function below
+    # TODO: combine this with the function below, seemed difficult to get working
     """
 
     for i in range(diff.shape[0]):

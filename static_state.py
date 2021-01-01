@@ -246,40 +246,35 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
         # The einsum takes the row-wise inner product of a matrix
         sign_angle = np.sign(np.einsum('ij,ij->i', i-j, f_l))
 
-        R = (i - j) - np.einsum('ij,ij->i', i-j, unit_vector(k - j))[:, np.newaxis]*unit_vector(k - j)
-        S = (l - k) - np.einsum('ij,ij->i', l-k, unit_vector(k - j))[:, np.newaxis]*unit_vector(k - j)
+        kj_norm = unit_vector(k - j)
+
+        R = (i - j) - np.einsum('ij,ij->i', i-j, kj_norm)[:, np.newaxis]*kj_norm
+        S = (l - k) - np.einsum('ij,ij->i', l-k, kj_norm)[:, np.newaxis]*kj_norm
 
         psi = sign_angle*angle_between(R,S) - np.pi  
 
         # Derivative of the potential 
         magnitude = -0.5*(C_1*np.sin(psi) - 2*C_2*np.sin(2*psi) + 3*C_3*np.sin(3*psi) - 4*C_4*np.sin(4*psi))
-        #print(magnitude)
 
-        force_i = -(magnitude*np.linalg.norm(k - j, axis=1)/(np.linalg.norm(f_i, axis=1)))[:, np.newaxis]*unit_vector(f_i)
-        force_l =  (magnitude*np.linalg.norm(k - j, axis=1)/(np.linalg.norm(f_l, axis=1)))[:, np.newaxis]*unit_vector(f_l)
+        r_kj = np.linalg.norm(k - j, axis=1)
 
-        term = np.reciprocal(np.linalg.norm(j - k, axis=1)**2)[:, np.newaxis]*(np.einsum('ij,ij->i', i-j, k-j)[:, np.newaxis]*force_i - np.einsum('ij,ij->i', k - l, k - j)[:, np.newaxis]*force_l)
+        force_i = -(magnitude*r_kj/(np.linalg.norm(f_i, axis=1)))[:, np.newaxis]*unit_vector(f_i)
+        force_l =  (magnitude*r_kj/(np.linalg.norm(f_l, axis=1)))[:, np.newaxis]*unit_vector(f_l)
+
+        term = np.reciprocal(r_kj**2)[:, np.newaxis]*(np.einsum('ij,ij->i', i - j, k - j)[:, np.newaxis]*force_i - np.einsum('ij,ij->i', k - l, k - j)[:, np.newaxis]*force_l)
 
         force_j = -force_i + term
         force_k = -force_l - term
-
-        # To check if the calculations are correct
-        # This is indeed 0 when running the simulation
-
-        # Middle of bond jk
-        #o = (j+k)/2.0
-        #torque = cross(i - o, force_i) + cross(j - o, force_j) + cross(k - o, force_k) + cross(l - o, force_l)
 
         np.add.at(force_total, dihedrals[:,0], force_i)
         np.add.at(force_total, dihedrals[:,1], force_j)
         np.add.at(force_total, dihedrals[:,2], force_k)
         np.add.at(force_total, dihedrals[:,3], force_l)
-    #print(force_total)
+
     return force_total
 
 
-#@guvectorize([(float64[:,:], float64, float64[:,:])], "(n,p), ()->(n,p)",
-#            nopython=True, cache=True)
+@jit(nopython=True, cache=True)
 def calculate_displacement(centres_of_mass, box_size, res):
     for i in range(centres_of_mass.shape[0]):
         for j in range(3):

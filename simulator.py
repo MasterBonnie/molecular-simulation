@@ -10,7 +10,7 @@ import integrators
 from static_state import centre_of_mass, compute_force, project_pos, kinetic_energy, potential_energy, temperature
 
 def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, 
-                observable_function = None, integrator="vv", write_output = True):
+                integrator="vv", write_output = True):
     """
     Numerical integration using either the euler algorithm,
     velocity verlet (vv) algorithm, or the verlet (v) algorithm.
@@ -40,6 +40,8 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
         print("No integrator selected")
         return
 
+    print("Initialization of simulation")
+
     t = 0
 
     # Progress bar variables
@@ -54,6 +56,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
     cf = 1.6605*6.022e-1 
 
     # Get all external variables
+    print("reading variables...", end="\r")
     pos, atoms, nr_atoms = io_sim.read_xyz(file_xyz)
     bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals = io_sim.read_topology(file_top)
 
@@ -82,6 +85,8 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
     Lambda = np.sqrt(T_desired/temp)
 
     v = Lambda*v
+
+    print("Starting with simulation:                       ")
 
     # Open the output file
     with open(file_out, "w") as output_file, open(file_observable, "w") as obs_file:
@@ -121,11 +126,8 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
                         const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms, box_size)
 
         while t < T:
-            io_sim.printProgressBar(progress, total_progress)
-
-            # if we want to calculate something
-            if observable_function:
-                observable_function(pos, v, f, obs_file)
+            if progress % 10 == 0:
+                io_sim.printProgressBar(progress, total_progress)
 
             # Based on the integrator we update the current pos and v
             # if integrator == "euler":
@@ -184,37 +186,20 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
 
     return
 
-def phase_space_h(pos, v, f, obs_file):
-    """
-    Example of how the observable function can be used in the integrator function
-    Calculates phase space data for a single hydrogen molecule, for use in the 
-    report
-    """
-    # NOTE: this is pretty bad if it was not used for 
-    # only the toy example of a single hydrogen molecule
-    diff = pos - pos[:, np.newaxis]
-    dis = np.linalg.norm(diff, axis=2)
-
-    r = dis[0][1]
-    v_plot = np.linalg.norm(v)
-    
-    obs_file.write(f"{r}, {v_plot} \n")
-
 # Testing of the functions
 if __name__ == "__main__":
 
     # Water file
     dt = 0.02 # 0.1 ps
-    T = 100  # 10^-13 s
+    T = 20 # 10^-13 s
     r_cut = 8 # A
     box_size = 50 # A
     file_xyz = "data/water.xyz"
     file_top = "data/water.itp"
     file_out = "output/result.xyz"
     file_observable = "output/result_phase.csv"
-    observable_function = None  
     integrator = "vv"
     write_output = True
 
-    #cProfile.run("integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, observable_function, integrator, write_output)")
-    integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, observable_function, integrator, write_output)
+    cProfile.run("integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output)")
+    #integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output)

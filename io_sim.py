@@ -3,6 +3,8 @@ import json
 
 import static_state
 import helper
+from helper import water_patern, water_atoms, ethanol_patern, ethanol_atoms
+from numba import vectorize, float64, jit, guvectorize, double
 
 import matplotlib.pyplot as plt
 
@@ -65,42 +67,80 @@ def radial_distribution_function(xyz_file, top_file, dr, box_size):
     Calculates the radial distribution function for a given xyz file
     Needs an associated topology file
     """
-    # What atoms are in which molecules
     _, _, _, _, _, _, molecules, _, _ = read_topology(top_file)
 
-    # Determine indices of oxygen atoms in ethanol and water
+    # Select which molecules and atoms we want to find the rdf of
+    first_molecule = "water"
+    #first_atom = "O"  first molecule is always O
+    second_molecule = "ethanol"
+    second_atom = "H"
+
+    # Number of reference atoms 
+    nr_reference_atoms = 100
+
+    # We create the appropriate lists to select the right reference
+    # atoms and relevant positions
     water_o = []
+    water_h = []
     ethanol_o = []
+    ethanol_h = []
+
     for molecule in molecules:
         if len(molecule) == 3:
             # If len is three we are in water
             water_o.append(molecule[0])
+            water_h.append(molecule[1])
+            water_h.append(molecule[2])
         elif len(molecule) == 9:
             # We are in ethanol molecule
             ethanol_o.append(molecule[7])
-    
+            
+            for i in [1,2,3,5,6,8]:
+                ethanol_h.append(molecule[i])
+
     water_o = np.array(water_o, dtype=np.int)
+    water_h = np.array(water_h, dtype=np.int)
+
     ethanol_o = np.array(ethanol_o, dtype=np.int)
+    ethanol_h = np.array(ethanol_h, dtype=np.int)
 
-    constraint_rdf = True
 
-    # Over which molecules we want to take averages
-    reference_atoms = [3*i for i in range(500)]
+    if first_molecule == "water":
+        reference_atoms = water_o[:nr_reference_atoms]
+    if first_molecule == "ethanol":
+        reference_atoms = ethanol_o[:nr_reference_atoms]
 
-    # Define r here
+    # now we define the position list we want to check ( in terms of indices)
+    if second_molecule == "water":
+        if second_atom == "O":
+            pos_index = water_o
+            nr_atoms = water_o.shape[0]
+        if second_atom == "H":
+            pos_index = water_h
+            nr_atoms = water_h.shape[0]
+    if second_molecule == "ethanol":
+        if second_atom == "O":
+            pos_index = ethanol_o
+            nr_atoms = ethanol_o.shape[0]
+        if second_atom == "H":
+            pos_index == ethanol_h
+            nr_atoms = ethanol_h.shape[0]
+
+    # r is the maximum distance we check
     r = 9
 
     # Number of bins
     n = 1000    
 
     # List of distances:
-    distances = [(1+(i+1)*r/n, 1+(i+1)*r/n + dr) for i in range(n)]
+    distances = np.array([[1+(i+1)*r/n, 1+(i+1)*r/n + dr] for i in range(n)])
 
+    # Final rdf values
     total_rdf = np.zeros((n))
 
     iteration = 0
-    begin = 1000
-    end = 1030
+    begin = 200
+    end = 225
 
     with open(xyz_file, "r") as input_file:    
         while True:   
@@ -108,70 +148,66 @@ def radial_distribution_function(xyz_file, top_file, dr, box_size):
 
             if not line:
                 break
-            nr_atoms = int(line)
+            nr_atoms_total = int(line)
 
             # Comment
             line = input_file.readline()
 
-            # Position stores the positions of all atoms
-            # in one time step
-            pos = np.zeros((nr_atoms, 3))
-            atom_names = []
-
-            # We read out all the atoms
-            for i in range(nr_atoms):
-                line = input_file.readline()
-                splittedLine = line.split()
-                pos[i] = np.asarray(splittedLine[1:], np.float)
-                atom_names.append(splittedLine[0])
-
             if iteration > begin and iteration < end:
-                print(iteration)
-                # We now have all positions for this timestep
-                # We loop over the reference molecules and
-                # calculate their rdf
+                # Position stores the positions of all atoms
+                # in one time step
+                pos = np.zeros((nr_atoms, 3))
+                atom_names = []
+
+                for i in range(nr_atoms_total):
+                    line = input_file.readline()
+                    splittedLine = line.split()
+                    pos[i] = np.asarray(splittedLine[1:], np.float)
+                    atom_names.append(splittedLine[0])
+                
                 rdf = np.zeros((n))
+                density = nr_atoms/(box_size**3)
+                calculate_rdf(distances, pos[reference_atoms], pos[pos_index], box_size, density, rdf)
 
-                # Total density:
-                if constraint_rdf:
-                    density = nr_atoms/(3*(box_size**3))
-                else:
-                    density = nr_atoms/(box_size**3)
-                i = 0
-                for lower, upper in distances:
-                    print(i, end="\r")
-                    # Number of atoms in this range
-
-                    for reference_atom in reference_atoms:
-                        if not constraint_rdf:
-                            reference_position = np.ones((nr_atoms, 3))*pos[reference_atom]
-                            dis = np.zeros((nr_atoms))
-                            diff = np.zeros((nr_atoms, 3))
-                            helper.distance_PBC(reference_position, pos, box_size, dis, diff)  
-                        elif constraint_rdf:
-                            reference_position = np.ones((water_o.shape[0], 3))*pos[reference_atom]
-                            dis = np.zeros((water_o.shape[0]))
-                            diff = np.zeros((water_o.shape[0], 3))
-                            helper.distance_PBC(reference_position, pos[water_o], box_size, dis, diff) 
-
-                        nr = np.sum((lower < dis) & (dis < upper))
-                        rdf[i] += nr
-                    
-                    rdf[i] = rdf[i] / len(reference_atoms)
-                    rdf[i] = rdf[i] / ((4*np.pi/3)*(upper**3-lower**3))
-                    rdf[i] = rdf[i] / density
-
-                    i = i + 1
-                    
-                print()
+                print(f"{100*(iteration-begin)/(end - begin)} %", end="\r")
                 total_rdf += rdf
-            
+
+            else:
+                for i in range(nr_atoms):
+                    line = input_file.readline()
+
+                
             iteration += 1
 
         total_rdf = total_rdf/(end - begin)
+        
+        # Save rdf calculation in csv file
+        np.savetxt("output/rdf/rdf.csv", total_rdf, delimiter=",")
+        
         plt.plot([distance[0] for distance in distances], total_rdf)
         plt.show()
 
+
+@jit(nopython=True, cache=True)
+def calculate_rdf(distances, reference_atoms, pos, box_length, density, rdf):
+    for i in range(distances.shape[0]):
+        lower = distances[i][0]
+        upper = distances[i][1]
+
+
+        for j in range(reference_atoms.shape[0]):
+            reference_atom = reference_atoms[j]
+
+            for k in range(pos.shape[0]):
+                if k != j:
+
+                    dis = distance(reference_atom, pos[k], box_length)
+                    if lower < dis and dis < upper:
+                        rdf[i] = rdf[i] + 1
+
+        rdf[i] = rdf[i] /  reference_atoms.shape[0]
+        rdf[i] = rdf[i] / ((4*np.pi/3)*(upper**3-lower**3))
+        rdf[i] = rdf[i] / density
 
 def read_topology(input):
     """
@@ -311,28 +347,6 @@ def printProgressBar(iteration, total, prefix = '', suffix = '', decimals = 1, l
     if iteration == total: 
         print()
 
-_water_patern = np.array([
-                          [1.93617934,      2.31884508,      1.72261570],
-                          [1.78931374,      3.24075634,      1.51114298],
-                          [2.30448689,      1.98045541,      0.90160232]
-                           ])
-
-_water_atoms = ["O", "H", "H"]
-
-_ethanol_patern = np.array([
-                        [0.826028, -0.40038, -0.826028],
-                        [1.42445, -1.03723, -0.171629],
-                        [1.49617, 0.1448, -1.49617],
-                        [0.171629, -1.03723, -1.42445],
-                        [0.0, 0.55946, 0.0],
-                        [-0.597, 1.20751, -0.657249],
-                        [0.657249, 1.20751, 0.59706],
-                        [-0.841514, -0.22767, 0.841514],
-                        [-1.37647, 0.38153, 1.37647]
-                            ])
-
-_ethanol_atoms = ["C","H","H","H","C","H","H","O","H"]
-
 def create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top):
     """ 
     Creates a dataset with nr_h20 water molecules and nr_ethanol ethanol molecules
@@ -352,24 +366,25 @@ def create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_x
         pos = []
 
         for i in range(nr_h20):
-            print(f"{i}th water molecule")
+            print(f"{i}th water molecule", end="\r")
             random_displacement = np.random.uniform(0, box_size, (3))
-            water = np.asarray([_water_patern[0] + random_displacement,
-                               _water_patern[1] + random_displacement,
-                               _water_patern[2] + random_displacement]) 
+            water = np.asarray([water_patern[0] + random_displacement,
+                               water_patern[1] + random_displacement,
+                               water_patern[2] + random_displacement]) 
 
+            
 
             while check_placement_per_atom(water, pos, box_size, tol_h20):
                 random_displacement = np.random.uniform(0, box_size, (3))
-                water = np.asarray([_water_patern[0] + random_displacement,
-                               _water_patern[1] + random_displacement,
-                               _water_patern[2] + random_displacement]) 
+                water = np.asarray([water_patern[0] + random_displacement,
+                               water_patern[1] + random_displacement,
+                               water_patern[2] + random_displacement]) 
 
             for atom in water:
                 pos.append(atom)
             
 
-            for j, atom in enumerate(_water_atoms):
+            for j, atom in enumerate(water_atoms):
                 xyz_file.write(helper.atom_string(atom, water[j]))
 
 
@@ -383,19 +398,19 @@ def create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_x
             molecules.append(f"{3*i} {3*i+1} {3*i+2} \n")
 
         for i in range(nr_ethanol):
-            print(f"{i}th ethanol molecule")
+            print(f"{i}th ethanol molecule", end="\r")
             random_displacement = np.random.uniform(0, box_size, (3))
-            ethanol = np.asarray([_ethanol_patern[i] + random_displacement for i in range(9)])
+            ethanol = np.asarray([ethanol_patern[i] + random_displacement for i in range(9)])
 
 
             while check_placement_per_atom(ethanol, pos, box_size, tol_eth):
                 random_displacement = np.random.uniform(0, box_size, (3))
-                ethanol = np.asarray([_ethanol_patern[i] + random_displacement for i in range(9)])
+                ethanol = np.asarray([ethanol_patern[i] + random_displacement for i in range(9)])
 
             for atom in ethanol:
                 pos.append(atom)
 
-            for j, atom in enumerate(_ethanol_atoms):
+            for j, atom in enumerate(ethanol_atoms):
                 xyz_file.write(helper.atom_string(atom, ethanol[j]))
 
             # Correctly offset counter
@@ -461,7 +476,7 @@ def create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_x
             dihedrals.append(f"{9*i + 5 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 0.94140 2.82420 0.0 -3.76560 \n")
             dihedrals.append(f"{9*i + 6 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 0.94140 2.82420 0.0 -3.76560 \n")
 
-
+        print()
         # Write to topology file
         top_file.write(f"bonds {2*nr_h20 + 8*nr_ethanol} \n")
         for string in bonds:
@@ -480,6 +495,7 @@ def create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_x
             for string in dihedrals:
                 top_file.write(string)
 
+@jit(nopython=True, cache=True)
 def distance(pos_1, pos_2, box_length):
     x = helper.abs_min(pos_1[0] - pos_2[0], pos_1[0]  - pos_2[0] + box_length, pos_1[0]  - pos_2[0] - box_length)  
 
@@ -493,14 +509,6 @@ def distance(pos_1, pos_2, box_length):
         
     return helper.norm(x,y,z)
 
-
-def check_placement(molecule, pos, box, tol):
-    for com in pos:
-        if distance(molecule, com, box) < tol:
-            return True
-
-    return False
-
 def check_placement_per_atom(molecule, pos, box, tol):
     for com in pos:
         for atom in molecule:
@@ -513,14 +521,14 @@ if __name__ == "__main__":
     #pos, atom_names, atoms = read_xyz("data/water_top.xyz")
     #bonds, const_bonds, angles, const_angles, lj, const_lj, molecules = read_topology("data/top.itp")  
 
-    nr_h20 = 1000
-    tol_h20 = 1.5
+    nr_h20 = 4165
+    tol_h20 = 1.75
     nr_ethanol = 0
     tol_eth = 3
     box_size = 50 
-    output_file_xyz = "data/rdf_test.xyz"
-    output_file_top = "data/rdf_test.itp"
+    output_file_xyz = "data/water.xyz"
+    output_file_top = "data/water.itp"
 
-    create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
+    #create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
 
-    #radial_distribution_function("output/result.xyz", "data/water.itp", 0.05, box_size = 50)
+    radial_distribution_function("output/result.xyz", "data/water.itp", 0.05, box_size = 50)
