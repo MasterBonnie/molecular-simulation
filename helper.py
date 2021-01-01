@@ -94,10 +94,9 @@ def neighbor_list(pos, molecule_to_atoms, centre_of_mass, r_cut, box_size):
     r_cut distance of eachother 
     """
     dis_matrix = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]))
-    distance_PBC_matrix(centre_of_mass - centre_of_mass[:, np.newaxis], box_size, dis_matrix)
+    distance_PBC_matrix(centre_of_mass - centre_of_mass[:, np.newaxis], box_size, r_cut, dis_matrix)
 
-    adj = (0 < dis_matrix) & (dis_matrix < r_cut)
-    nl =  np.transpose(np.nonzero(adj))
+    nl =  np.transpose(np.nonzero(dis_matrix))
 
     if nl.size != 0:
         lj_atoms = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
@@ -143,9 +142,9 @@ def abs_min(x1,x2,x3):
 
     return res
 
-@guvectorize([(float64[:,:,:], float64, float64[:,:])], "(n,n,p),()->(n,n)",
+@guvectorize([(float64[:,:,:], float64, float64, float64[:,:])], "(n,n,p),(),()->(n,n)",
             nopython=True, cache=True)
-def distance_PBC_matrix(diff, box_length, res):
+def distance_PBC_matrix(diff, box_length, r_cut, res):
     """
     Function to compute the distance of a matrix of vectors when considering
     periodic boundary conditions
@@ -173,9 +172,10 @@ def distance_PBC_matrix(diff, box_length, res):
                         diff[i][j][2] + box_length, 
                         diff[i][j][2] - box_length)       
 
-                res[i][j] = norm(x,y,z)
-
-
+                length = norm(x,y,z)
+                if (0 < length) and (length < r_cut):
+                    res[i][j] = 1
+                
 @guvectorize([(float64[:,:], float64[:,:], float64, float64[:], float64[:,:])], "(n,p),(n,p),()->(n),(n,p)",
             nopython=True, cache=True)
 def distance_PBC(pos_1, pos_2, box_length, res, diff):

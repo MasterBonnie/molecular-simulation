@@ -1,5 +1,5 @@
 import numpy as np
-from numba import vectorize, float64, jit, guvectorize, double
+from numba import vectorize, float64, jit, guvectorize, double, prange
 from helper import unit_vector, angle_between, distance_PBC
 
 
@@ -130,6 +130,11 @@ def cross_(vec1, vec2, result):
         result[i][2] = a1 * b2 - a2 * b1
     return result
 
+@jit(nopython=True, cache=True, parallel=True)
+def addition_force(index, force, force_total):
+    for i in prange(index.shape[0]):
+        force_total[index[i]] += force[i]    
+
 def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
                     box_size):
     """
@@ -168,8 +173,10 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     force = magnitudes[:, np.newaxis]*unit_vector(diff)
     
     # Add them to the total force
-    np.add.at(force_total, bonds[:,0], force)
-    np.add.at(force_total, bonds[:,1], -force)
+    #np.add.at(force_total, bonds[:,0], force)
+    #np.add.at(force_total, bonds[:,1], -force)
+    addition_force(bonds[:,0], force, force_total)
+    addition_force(bonds[:,1], -force, force_total)
 
     #----------------------------------
     # Forces due to angles in molecules
@@ -195,9 +202,12 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     force_ang_2 = np.multiply(np.true_divide(mag_ang, dis_2)[:, np.newaxis], angular_force_unit_2)
     
     # Add them to the total force
-    np.add.at(force_total, angles[:,0], force_ang_1)
-    np.add.at(force_total, angles[:,2], force_ang_2)
-    np.add.at(force_total, angles[:,1], -(force_ang_1 + force_ang_2))
+    #np.add.at(force_total, angles[:,0], force_ang_1)
+    #np.add.at(force_total, angles[:,2], force_ang_2)
+    #np.add.at(force_total, angles[:,1], -(force_ang_1 + force_ang_2))
+    addition_force(angles[:,0], force_ang_1, force_total)
+    addition_force(angles[:,2], force_ang_2, force_total)
+    addition_force(angles[:,1], -(force_ang_1 + force_ang_2), force_total)
 
     #----------------------------------
     # Forces due to Lennard Jones interaction
@@ -215,8 +225,10 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
         magnitudes = 6*np.multiply(np.true_divide(lj_eps[lj_atoms[:,0], lj_atoms[:,1]], dis), term_1 + term_2)
         force = magnitudes[:, np.newaxis]*unit_vector(diff)
 
-        np.add.at(force_total, lj_atoms[:,0], force)
-        np.add.at(force_total, lj_atoms[:,1], -force)
+        #np.add.at(force_total, lj_atoms[:,0], force)
+        #np.add.at(force_total, lj_atoms[:,1], -force)
+        addition_force(lj_atoms[:,0], force, force_total)
+        addition_force(lj_atoms[:,1], -force, force_total)
 
     #----------------------------------
     # Forces due to dihedral angles
@@ -266,10 +278,15 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
         force_j = -force_i + term
         force_k = -force_l - term
 
-        np.add.at(force_total, dihedrals[:,0], force_i)
-        np.add.at(force_total, dihedrals[:,1], force_j)
-        np.add.at(force_total, dihedrals[:,2], force_k)
-        np.add.at(force_total, dihedrals[:,3], force_l)
+        #np.add.at(force_total, dihedrals[:,0], force_i)
+        #np.add.at(force_total, dihedrals[:,1], force_j)
+        #np.add.at(force_total, dihedrals[:,2], force_k)
+        #np.add.at(force_total, dihedrals[:,3], force_l)
+
+        addition_force(dihedrals[:,0], force_i, force_total)
+        addition_force(dihedrals[:,1], force_j, force_total)
+        addition_force(dihedrals[:,2], force_k, force_total)
+        addition_force(dihedrals[:,3], force_l, force_total)
 
     return force_total
 

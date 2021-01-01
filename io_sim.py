@@ -521,14 +521,14 @@ if __name__ == "__main__":
     #pos, atom_names, atoms = read_xyz("data/water_top.xyz")
     #bonds, const_bonds, angles, const_angles, lj, const_lj, molecules = read_topology("data/top.itp")  
 
-    nr_h20 = 4165
-    tol_h20 = 1.75
+    nr_h20 = 500
+    tol_h20 = 2
     nr_ethanol = 0
     tol_eth = 3
     box_size = 50 
-    output_file_xyz = "data/water.xyz"
-    output_file_top = "data/water.itp"
+    output_file_xyz = "data/water_500.xyz"
+    output_file_top = "data/water_500.itp"
 
-    #create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
+    create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
 
-    radial_distribution_function("output/result.xyz", "data/water.itp", 0.05, box_size = 50)
+    #radial_distribution_function("output/result.xyz", "data/water.itp", 0.05, box_size = 50)

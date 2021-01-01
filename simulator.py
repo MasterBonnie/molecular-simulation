@@ -164,20 +164,20 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
             t += dt
             progress += 1
 
-            # I/O operations
-            energy_kinetic = kinetic_energy(v,m)
-            energy_potential, energy_bond, energy_angle, energy_dihedral = potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
-                    box_size)
-            energy_total = energy_kinetic + energy_potential
-
-            temp = temperature(energy_kinetic,nr_atoms)
-            Lambda = np.sqrt(T_desired/temp)
-
-            v = Lambda*v
-
-            obs_file.write(f"{energy_potential}, {energy_kinetic}, {energy_total}, {energy_bond}, {energy_angle}, {energy_dihedral}, {temp} \n")
-
             if write_output:
+                # I/O operations
+                energy_kinetic = kinetic_energy(v,m)
+                energy_potential, energy_bond, energy_angle, energy_dihedral = potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
+                        box_size)
+                energy_total = energy_kinetic + energy_potential
+
+                temp = temperature(energy_kinetic,nr_atoms)
+                Lambda = np.sqrt(T_desired/temp)
+
+                v = Lambda*v
+
+                obs_file.write(f"{energy_potential}, {energy_kinetic}, {energy_total}, {energy_bond}, {energy_angle}, {energy_dihedral}, {temp} \n")
+
                 output_file.write(f"{nr_atoms}" + '\n')
                 output_file.write("Comments" + '\n')
 
@@ -191,15 +191,15 @@ if __name__ == "__main__":
 
     # Water file
     dt = 0.02 # 0.1 ps
-    T = 20 # 10^-13 s
+    T = 50 # 10^-13 s
     r_cut = 8 # A
     box_size = 50 # A
-    file_xyz = "data/water.xyz"
-    file_top = "data/water.itp"
+    file_xyz = "data/water_500.xyz"
+    file_top = "data/water_500.itp"
     file_out = "output/result.xyz"
     file_observable = "output/result_phase.csv"
     integrator = "vv"
-    write_output = True
+    write_output = False
 
     cProfile.run("integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output)")
     #integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output)
