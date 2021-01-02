@@ -1,5 +1,5 @@
 import numpy as np
-from numba import vectorize, float64, jit, guvectorize, int32
+from numba import vectorize, float64, jit, guvectorize, int16
 import math
 #import static_state
 
@@ -77,18 +77,19 @@ def atom_string(atom, pos):
 def atom_name_to_mass(atoms):
     """ converts an atom name to its mass"""
     mass = [atom_mass[atom] for atom in atoms]
-    return np.array(mass)
+    return np.array(mass + [0])
 
 @jit(nopython=True, cache=True)
 def cartesianprod(x,y):
-    res = np.zeros((x.shape[0]*y.shape[0],2), dtype=int32)
+    res = np.zeros((x.shape[0]*y.shape[0],2), dtype=int16)
 
     for i in range(x.shape[0]):
         for j in range(y.shape[0]):
-            res[i*x.shape[0] + j] = np.array([x[i],y[j]], dtype=int32)
+            res[i*x.shape[0] + j] = np.array([x[i],y[j]], dtype=int16)
     return res
 
-def neighbor_list(pos, molecule_to_atoms, centre_of_mass, r_cut, box_size):
+
+def neighbor_list(pos, molecule_to_atoms, centre_of_mass, r_cut, box_size, nr_atoms):
     """
     Returns which atoms are close, based on centres of mass that are withtin 
     r_cut distance of eachother 
@@ -96,16 +97,25 @@ def neighbor_list(pos, molecule_to_atoms, centre_of_mass, r_cut, box_size):
     dis_matrix = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]))
     distance_PBC_matrix(centre_of_mass - centre_of_mass[:, np.newaxis], box_size, r_cut, dis_matrix)
 
-    nl =  np.transpose(np.nonzero(dis_matrix))
+    return check_index(dis_matrix, molecule_to_atoms, nr_atoms)
 
-    if nl.size != 0:
-        lj_atoms = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
-    else:
-        lj_atoms = np.array([])
+@jit(nopython=True, cache=True)
+def check_index(dis_matrix, molecule_to_atoms, nr_atoms):
+    i_1, i_2 = np.nonzero(dis_matrix)
 
-    return lj_atoms
+    indices = []
 
-def create_list(molecules):
+    for i in range(len(i_1)):
+        atom_2_atom = molecule_to_atoms[i_1[i], i_2[i]]
+
+        for connection in atom_2_atom:
+            if not (connection[0] == nr_atoms or connection[1] == nr_atoms):
+                indices.append(connection)
+
+    return indices
+
+@jit(nopython=True, cache=True)
+def create_list(molecules, fixed_atom_length):
     """
     Creates list of what atoms are connected given molecules that are
     connected, i.e. matrix[i][j] is the cartesian product of the atoms 
@@ -114,13 +124,15 @@ def create_list(molecules):
     # NOTE: inefficient double loop, but we only call this once so it is
             not that bad
     """
-    matrix = [[0 for j in range(len(molecules))] for i in range(len(molecules))]
+    n = molecules.shape[0]
+    matrix = np.zeros((n, n, fixed_atom_length**2, 2), dtype=np.int16)
+    #matrix = [[0 for j in range(len(molecules))] for i in range(len(molecules))]
 
-    for i in range(len(molecules)):
-        print(f"working on creating list...  {(100*i)//(len(molecules))} %        ", end="\r")
-        for j in range(len(molecules)):
+    for i in range(n):
+        #print(f"working on creating list...  {(100*i)//(len(molecules))} %        ", end="\r")
+        for j in range(n):
             if j > i:
-                matrix[i][j] = cartesianprod(np.array(molecules[i], dtype=np.int), np.array(molecules[j], dtype=np.int))
+                matrix[i][j] = cartesianprod(molecules[i],molecules[j])
 
     return matrix
 

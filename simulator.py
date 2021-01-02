@@ -10,7 +10,7 @@ import integrators
 from static_state import centre_of_mass, compute_force, project_pos, kinetic_energy, potential_energy, temperature
 
 def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, 
-                integrator="vv", write_output = True):
+                integrator="vv", write_output = True, fill_in_molecules = 3):
     """
     Numerical integration using either the euler algorithm,
     velocity verlet (vv) algorithm, or the verlet (v) algorithm.
@@ -56,9 +56,11 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
     cf = 1.6605*6.022e-1 
 
     # Get all external variables
-    print("reading variables...", end="\r")
+    print("reading variables...", end="\n")
     pos, atoms, nr_atoms = io_sim.read_xyz(file_xyz)
-    bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals = io_sim.read_topology(file_top)
+    bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals = io_sim.read_topology(file_top, nr_atoms, fill_in_molecules)
+
+    pos = np.append(pos, [[0,0,0]], axis=0)
 
     # Mass is given in amu
     m = atom_name_to_mass(atoms)
@@ -75,11 +77,12 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
 
     # Create the conversion from molecules to atoms
     # This is for the Lennard-Jones potential
-    molecule_to_atoms = create_list(molecules)
+
+    molecule_to_atoms = create_list(molecules, fill_in_molecules)
 
     # Random initial velocity
     v = unit_vector(np.random.uniform(size=[nr_atoms,3]))
-    energy_kinetic = kinetic_energy(v,m)
+    energy_kinetic = kinetic_energy(v,m[:-1])
 
     temp = temperature(energy_kinetic,nr_atoms)
     Lambda = np.sqrt(T_desired/temp)
@@ -121,9 +124,11 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
         # Compute the force on the entire system
         centres_of_mass = centre_of_mass(pos, m, molecules)
         project_pos(centres_of_mass, box_size, pos, molecules)
-        lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size)
+
+        lj_atoms = np.array(neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms), dtype=np.int16)
+
         f = cf*compute_force(pos, bonds, const_bonds, angles,
-                        const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms, box_size)
+                        const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms, box_size)
 
         while t < T:
             if progress % 10 == 0:
@@ -140,16 +145,16 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
             #                 const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms, box_size)
 
             if integrator == "vv":
-                pos = integrators.integrator_velocity_verlet_pos(pos, v, f, m, dt)
+                pos[:-1] = integrators.integrator_velocity_verlet_pos(pos[:-1], v, f, m[:-1], dt)
 
                 centres_of_mass = centre_of_mass(pos, m, molecules)
                 project_pos(centres_of_mass, box_size, pos, molecules)
-                lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size)
+                lj_atoms = np.array(neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms), dtype=np.int16)
 
                 f_old = f
                 f = cf*compute_force(pos, bonds, const_bonds, angles,
-                                    const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms, box_size)
-                v = integrators.integrator_velocity_verlet_vel(v, f_old, f, m, dt)
+                                    const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms, box_size)
+                v = integrators.integrator_velocity_verlet_vel(v, f_old, f, m[:-1], dt)
 
             # elif integrator == "v":
             #     pos_old, (pos, _) = pos, integrators.integrator_verlet_pos(pos, pos_old, f, m, dt)
@@ -194,12 +199,15 @@ if __name__ == "__main__":
     T = 50 # 10^-13 s
     r_cut = 8 # A
     box_size = 50 # A
-    file_xyz = "data/water_500.xyz"
-    file_top = "data/water_500.itp"
+    file_xyz = "data/water_1000.xyz"
+    file_top = "data/water_1000.itp"
     file_out = "output/result.xyz"
     file_observable = "output/result_phase.csv"
     integrator = "vv"
     write_output = False
 
+    #NOTE: DO NOT FORGET TO CHANGE THIS 
+    fill_in_molecules = 3
+
     cProfile.run("integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output)")
-    #integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output)
+    #integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output, fill_in_molecules)

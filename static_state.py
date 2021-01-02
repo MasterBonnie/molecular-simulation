@@ -1,6 +1,6 @@
 import numpy as np
-from numba import vectorize, float64, jit, guvectorize, double, prange
-from helper import unit_vector, angle_between, distance_PBC
+from numba import vectorize, float64, jit, guvectorize, double, prange, int32
+from helper import unit_vector, angle_between, distance_PBC, norm
 
 
 """File for extracting/calculating information about a state at a particular time step"""
@@ -8,6 +8,7 @@ from helper import unit_vector, angle_between, distance_PBC
 # TODO: rewrite this as numba function, using jit
 # This might be difficult as numba does not like lists of lists, such as molecules
 # otherwise rewrite as numpy function, without the loop
+@jit(nopython=True, cache=True, parallel=True)
 def centre_of_mass(pos, m, molecules):
     """
     Computes the centre of mass for each molecule
@@ -20,11 +21,16 @@ def centre_of_mass(pos, m, molecules):
     Output:
         centre_of_mass: array containg the centres of mass
     """
-    centre_of_mass = np.zeros((len(molecules), 3))
-    for i, molecule in enumerate(molecules):
-        molecule_np = np.array(molecule, dtype=np.int)
-        M = np.sum(m[molecule_np])
-        Mpos = np.sum(m[molecule_np, np.newaxis]*pos[molecule_np], axis = 0)
+    centre_of_mass = np.zeros((molecules.shape[0], 3))
+
+    for i in prange(molecules.shape[0]):
+        molecule = molecules[i]
+        M = np.sum(m[molecule])
+
+        Mpos = np.zeros((3))
+        for j in molecule:
+            Mpos += m[j] * pos[j]
+
         centre_of_mass[i] = Mpos/M
 
     return centre_of_mass
@@ -129,13 +135,9 @@ def cross_(vec1, vec2, result):
         result[i][1] = a3 * b1 - a1 * b3
         result[i][2] = a1 * b2 - a2 * b1
     return result
+ 
 
-@jit(nopython=True, cache=True, parallel=True)
-def addition_force(index, force, force_total):
-    for i in prange(index.shape[0]):
-        force_total[index[i]] += force[i]    
-
-def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
+def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms,
                     box_size):
     """
     Computes the force on each atom, given the position and information from a 
@@ -161,6 +163,7 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     """
     force_total = np.zeros((nr_atoms, 3))
 
+
     # Forces due to bonds between atoms
     #----------------------------------
     # Difference vectors for the bonds, and the
@@ -173,10 +176,8 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     force = magnitudes[:, np.newaxis]*unit_vector(diff)
     
     # Add them to the total force
-    #np.add.at(force_total, bonds[:,0], force)
-    #np.add.at(force_total, bonds[:,1], -force)
-    addition_force(bonds[:,0], force, force_total)
-    addition_force(bonds[:,1], -force, force_total)
+    np.add.at(force_total, bonds[:,0], force)
+    np.add.at(force_total, bonds[:,1], -force)
 
     #----------------------------------
     # Forces due to angles in molecules
@@ -192,7 +193,6 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     mag_ang = np.multiply(-const_angles[:,0], ang - const_angles[:,1])
 
     # Calculate the direction vectors for the forces 
-    # TODO: does cross return a unit vector already?
     cross_vector = cross(diff_1, diff_2)
     angular_force_unit_1 = unit_vector(cross(cross_vector, diff_1))
     angular_force_unit_2 = -unit_vector(cross(cross_vector, diff_2))
@@ -200,14 +200,11 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     # Actually calculate the forces
     force_ang_1 = np.multiply(np.true_divide(mag_ang, dis_1)[:, np.newaxis], angular_force_unit_1)
     force_ang_2 = np.multiply(np.true_divide(mag_ang, dis_2)[:, np.newaxis], angular_force_unit_2)
-    
+
     # Add them to the total force
-    #np.add.at(force_total, angles[:,0], force_ang_1)
-    #np.add.at(force_total, angles[:,2], force_ang_2)
-    #np.add.at(force_total, angles[:,1], -(force_ang_1 + force_ang_2))
-    addition_force(angles[:,0], force_ang_1, force_total)
-    addition_force(angles[:,2], force_ang_2, force_total)
-    addition_force(angles[:,1], -(force_ang_1 + force_ang_2), force_total)
+    np.add.at(force_total, angles[:,0], force_ang_1)
+    np.add.at(force_total, angles[:,2], force_ang_2)
+    np.add.at(force_total, angles[:,1], -(force_ang_1 + force_ang_2))
 
     #----------------------------------
     # Forces due to Lennard Jones interaction
@@ -225,10 +222,8 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
         magnitudes = 6*np.multiply(np.true_divide(lj_eps[lj_atoms[:,0], lj_atoms[:,1]], dis), term_1 + term_2)
         force = magnitudes[:, np.newaxis]*unit_vector(diff)
 
-        #np.add.at(force_total, lj_atoms[:,0], force)
-        #np.add.at(force_total, lj_atoms[:,1], -force)
-        addition_force(lj_atoms[:,0], force, force_total)
-        addition_force(lj_atoms[:,1], -force, force_total)
+        np.add.at(force_total, lj_atoms[:,0], force)
+        np.add.at(force_total, lj_atoms[:,1], -force)
 
     #----------------------------------
     # Forces due to dihedral angles
@@ -252,44 +247,42 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
         C_3 = const_dihedrals[:,2]
         C_4 = const_dihedrals[:,3]
 
-        f_i = cross(i - j, k - j)
-        f_l = cross(k - j, k - l)
+        ij = i - j
+        kj = k - j
+        kl = k - l
+
+        f_i = cross(ij, kj)
+        f_l = cross(kj, kl)
 
         # The einsum takes the row-wise inner product of a matrix
         sign_angle = np.sign(np.einsum('ij,ij->i', i-j, f_l))
 
-        kj_norm = unit_vector(k - j)
+        kj_norm = unit_vector(kj)
 
-        R = (i - j) - np.einsum('ij,ij->i', i-j, kj_norm)[:, np.newaxis]*kj_norm
-        S = (l - k) - np.einsum('ij,ij->i', l-k, kj_norm)[:, np.newaxis]*kj_norm
+        R = (ij) - np.einsum('ij,ij->i', ij, kj_norm)[:, np.newaxis]*kj_norm
+        S = (-kl) - np.einsum('ij,ij->i', -kl, kj_norm)[:, np.newaxis]*kj_norm
 
         psi = sign_angle*angle_between(R,S) - np.pi  
 
         # Derivative of the potential 
         magnitude = -0.5*(C_1*np.sin(psi) - 2*C_2*np.sin(2*psi) + 3*C_3*np.sin(3*psi) - 4*C_4*np.sin(4*psi))
 
-        r_kj = np.linalg.norm(k - j, axis=1)
+        r_kj = np.linalg.norm(kj, axis=1)
 
         force_i = -(magnitude*r_kj/(np.linalg.norm(f_i, axis=1)))[:, np.newaxis]*unit_vector(f_i)
         force_l =  (magnitude*r_kj/(np.linalg.norm(f_l, axis=1)))[:, np.newaxis]*unit_vector(f_l)
 
-        term = np.reciprocal(r_kj**2)[:, np.newaxis]*(np.einsum('ij,ij->i', i - j, k - j)[:, np.newaxis]*force_i - np.einsum('ij,ij->i', k - l, k - j)[:, np.newaxis]*force_l)
+        term = np.reciprocal(r_kj**2)[:, np.newaxis]*(np.einsum('ij,ij->i', ij, kj)[:, np.newaxis]*force_i - np.einsum('ij,ij->i', kl, kj)[:, np.newaxis]*force_l)
 
         force_j = -force_i + term
         force_k = -force_l - term
 
-        #np.add.at(force_total, dihedrals[:,0], force_i)
-        #np.add.at(force_total, dihedrals[:,1], force_j)
-        #np.add.at(force_total, dihedrals[:,2], force_k)
-        #np.add.at(force_total, dihedrals[:,3], force_l)
-
-        addition_force(dihedrals[:,0], force_i, force_total)
-        addition_force(dihedrals[:,1], force_j, force_total)
-        addition_force(dihedrals[:,2], force_k, force_total)
-        addition_force(dihedrals[:,3], force_l, force_total)
+        np.add.at(force_total, dihedrals[:,0], force_i)
+        np.add.at(force_total, dihedrals[:,1], force_j)
+        np.add.at(force_total, dihedrals[:,2], force_k)
+        np.add.at(force_total, dihedrals[:,3], force_l)
 
     return force_total
-
 
 @jit(nopython=True, cache=True)
 def calculate_displacement(centres_of_mass, box_size, res):
@@ -300,15 +293,16 @@ def calculate_displacement(centres_of_mass, box_size, res):
             elif centres_of_mass[i][j] > box_size:
                 res[i][j] = - box_size
 
-#@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True)
 def project_pos(centres_of_mass, box_size, pos, molecules):
     
     displacement = np.zeros(centres_of_mass.shape)
     calculate_displacement(centres_of_mass, box_size, displacement)
 
     for i, molecule in enumerate(molecules):
-        molecule_np = np.array(molecule, dtype=np.int)
-        pos[molecule_np] += displacement[i]
+        pos[molecule] += displacement[i]
+
+    pos[-1] = np.array([0,0,0])
 
 def temperature(Ekin,N):
     conversion = 3*1.3806*6.022/1000
