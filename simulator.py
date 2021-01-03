@@ -77,7 +77,6 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
 
     # Create the conversion from molecules to atoms
     # This is for the Lennard-Jones potential
-
     molecule_to_atoms = create_list(molecules, fill_in_molecules)
 
     # Random initial velocity
@@ -98,7 +97,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
             output_file.write(f"{nr_atoms}" + '\n')
             output_file.write("Comments" + '\n')
  
-            for atom_name, atom in enumerate(pos):
+            for atom_name, atom in enumerate(pos[:-1]):
                 output_file.write(atom_string(atoms[atom_name], atom))
 
         # If we use the verlet integrator, we take one step using the 
@@ -125,7 +124,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
         centres_of_mass = centre_of_mass(pos, m, molecules)
         project_pos(centres_of_mass, box_size, pos, molecules)
 
-        lj_atoms = np.array(neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms), dtype=np.int16)
+        lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms, fill_in_molecules)
 
         f = cf*compute_force(pos, bonds, const_bonds, angles,
                         const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms, box_size)
@@ -149,7 +148,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
 
                 centres_of_mass = centre_of_mass(pos, m, molecules)
                 project_pos(centres_of_mass, box_size, pos, molecules)
-                lj_atoms = np.array(neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms), dtype=np.int16)
+                lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms, fill_in_molecules)
 
                 f_old = f
                 f = cf*compute_force(pos, bonds, const_bonds, angles,
@@ -169,24 +168,24 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
             t += dt
             progress += 1
 
+            energy_kinetic = kinetic_energy(v,m[:-1])
+            temp = temperature(energy_kinetic,nr_atoms)
+            Lambda = np.sqrt(T_desired/temp)
+
+            v = Lambda*v
+
             if write_output:
                 # I/O operations
-                energy_kinetic = kinetic_energy(v,m)
-                energy_potential, energy_bond, energy_angle, energy_dihedral = potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
-                        box_size)
-                energy_total = energy_kinetic + energy_potential
+                # energy_potential, energy_bond, energy_angle, energy_dihedral = potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
+                #         box_size)
+                # energy_total = energy_kinetic + energy_potential
 
-                temp = temperature(energy_kinetic,nr_atoms)
-                Lambda = np.sqrt(T_desired/temp)
-
-                v = Lambda*v
-
-                obs_file.write(f"{energy_potential}, {energy_kinetic}, {energy_total}, {energy_bond}, {energy_angle}, {energy_dihedral}, {temp} \n")
+                # obs_file.write(f"{energy_potential}, {energy_kinetic}, {energy_total}, {energy_bond}, {energy_angle}, {energy_dihedral}, {temp} \n")
 
                 output_file.write(f"{nr_atoms}" + '\n')
                 output_file.write("Comments" + '\n')
 
-                for atom_name, atom in enumerate(pos):
+                for atom_name, atom in enumerate(pos[:-1]):
                     output_file.write(atom_string(atoms[atom_name], atom))
 
     return
@@ -196,18 +195,18 @@ if __name__ == "__main__":
 
     # Water file
     dt = 0.02 # 0.1 ps
-    T = 50 # 10^-13 s
+    T = 10 # 10^-13 s
     r_cut = 8 # A
     box_size = 50 # A
-    file_xyz = "data/water_1000.xyz"
-    file_top = "data/water_1000.itp"
+    file_xyz = "data/ethanol.xyz"
+    file_top = "data/ethanol.itp"
     file_out = "output/result.xyz"
     file_observable = "output/result_phase.csv"
     integrator = "vv"
-    write_output = False
+    write_output = True
 
     #NOTE: DO NOT FORGET TO CHANGE THIS 
-    fill_in_molecules = 3
+    fill_in_molecules = 9
 
-    cProfile.run("integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output)")
+    cProfile.run("integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output, fill_in_molecules)")
     #integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output, fill_in_molecules)

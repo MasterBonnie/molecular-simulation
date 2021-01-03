@@ -526,13 +526,13 @@ if __name__ == "__main__":
     #pos, atom_names, atoms = read_xyz("data/water_small.xyz")
     #bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals = read_topology("data/water_small.itp", atoms, 5)  
 
-    nr_h20 = 2
-    tol_h20 = 2
-    nr_ethanol = 0
-    tol_eth = 2
-    box_size = 5 
-    output_file_xyz = "data/water_small.xyz"
-    output_file_top = "data/water_small.itp"
+    nr_h20 = 0
+    tol_h20 = 1.7
+    nr_ethanol = 2
+    tol_eth = 1.5
+    box_size = 5
+    output_file_xyz = "data/ethanol_small.xyz"
+    output_file_top = "data/ethanol_small.itp"
 
     create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
 

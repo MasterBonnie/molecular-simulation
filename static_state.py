@@ -176,8 +176,11 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     force = magnitudes[:, np.newaxis]*unit_vector(diff)
     
     # Add them to the total force
-    np.add.at(force_total, bonds[:,0], force)
-    np.add.at(force_total, bonds[:,1], -force)
+    # np.add.at(force_total, bonds[:,0], force)
+    # np.add.at(force_total, bonds[:,1], -force)
+
+    add_jit(force_total, bonds[:,0], force)
+    add_jit(force_total, bonds[:,1], -force)
 
     #----------------------------------
     # Forces due to angles in molecules
@@ -202,28 +205,38 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
     force_ang_2 = np.multiply(np.true_divide(mag_ang, dis_2)[:, np.newaxis], angular_force_unit_2)
 
     # Add them to the total force
-    np.add.at(force_total, angles[:,0], force_ang_1)
-    np.add.at(force_total, angles[:,2], force_ang_2)
-    np.add.at(force_total, angles[:,1], -(force_ang_1 + force_ang_2))
+    # np.add.at(force_total, angles[:,0], force_ang_1)
+    # np.add.at(force_total, angles[:,2], force_ang_2)
+    # np.add.at(force_total, angles[:,1], -(force_ang_1 + force_ang_2))
+
+    add_jit(force_total, angles[:,0], force_ang_1)
+    add_jit(force_total, angles[:,2], force_ang_2)
+    add_jit(force_total, angles[:,1], -(force_ang_1 + force_ang_2))
 
     #----------------------------------
     # Forces due to Lennard Jones interaction
     #----------------------------------
     #if lj_atoms is not empty
     if lj_atoms.shape[0] != 0:
+
         diff = np.zeros((lj_atoms.shape[0], 3))
         dis = np.zeros(diff.shape[0])
-        distance_PBC(pos[lj_atoms[:,0]], pos[lj_atoms[:,1]],  box_size, dis, diff)
+        distance_PBC(pos[lj_atoms[:,0]], pos[lj_atoms[:,1]], box_size, dis, diff)
 
-        term = np.true_divide(lj_sigma[lj_atoms[:,0], lj_atoms[:,1]], dis)
-        term_1 = 2*np.power(term, 12)
-        term_2 = -1*np.power(term, 6)
+        # term = np.true_divide(lj_sigma[lj_atoms[:,0], lj_atoms[:,1]], dis)
+        # term_1 = 2*np.power(term, 12)
+        # term_2 = -1*np.power(term, 6)
 
-        magnitudes = 6*np.multiply(np.true_divide(lj_eps[lj_atoms[:,0], lj_atoms[:,1]], dis), term_1 + term_2)
-        force = magnitudes[:, np.newaxis]*unit_vector(diff)
+        # magnitudes = 6*np.multiply(np.true_divide(lj_eps[lj_atoms[:,0], lj_atoms[:,1]], dis), term_1 + term_2)
+        # force = magnitudes[:, np.newaxis]*unit_vector(diff)
 
-        np.add.at(force_total, lj_atoms[:,0], force)
-        np.add.at(force_total, lj_atoms[:,1], -force)
+        force_1, force_2 = lj_force(dis, unit_vector(diff), lj_atoms, lj_eps, lj_sigma, nr_atoms)
+        
+        force_total += force_1
+        force_total += force_2
+
+        # add_jit(force_total, lj_atoms[:,0], force)
+        # add_jit(force_total, lj_atoms[:,1], -force)
 
     #----------------------------------
     # Forces due to dihedral angles
@@ -277,12 +290,46 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
         force_j = -force_i + term
         force_k = -force_l - term
 
-        np.add.at(force_total, dihedrals[:,0], force_i)
-        np.add.at(force_total, dihedrals[:,1], force_j)
-        np.add.at(force_total, dihedrals[:,2], force_k)
-        np.add.at(force_total, dihedrals[:,3], force_l)
+        # np.add.at(force_total, dihedrals[:,0], force_i)
+        # np.add.at(force_total, dihedrals[:,1], force_j)
+        # np.add.at(force_total, dihedrals[:,2], force_k)
+        # np.add.at(force_total, dihedrals[:,3], force_l)
+
+        add_jit(force_total, dihedrals[:,0], force_i)
+        add_jit(force_total, dihedrals[:,1], force_j)
+        add_jit(force_total, dihedrals[:,2], force_k)
+        add_jit(force_total, dihedrals[:,3], force_l)
 
     return force_total
+
+@jit(nopython=True, cache=True, debug=True)
+def lj_force(dis, direction, lj_atoms, lj_eps, lj_sigma, nr_atoms):
+    force_1 = np.zeros((nr_atoms, 3))
+    force_2 = np.zeros((nr_atoms, 3))
+
+    for i in range(lj_atoms.shape[0]):
+        if lj_atoms[i,0] == nr_atoms:
+            break
+        if lj_atoms[i,1] == nr_atoms:
+            break
+
+        term = lj_sigma[lj_atoms[i,0],lj_atoms[i,1]] / dis[i]
+        term_1 = 2*np.power(term, 12)
+        term_2 = -1*np.power(term, 6)
+
+        magnitudes = 6*(lj_eps[lj_atoms[i,0],lj_atoms[i,1]]/dis[i])*(term_1 + term_2)
+
+        for j in range(3):
+            force_1[lj_atoms[i,0],j] += magnitudes*direction[i,j]
+            force_2[lj_atoms[i,1],j] += -magnitudes*direction[i,j]
+    
+    return force_1, force_2
+
+@jit(nopython=True, cache=True)
+def add_jit(total, index, addition):
+    for i in range(index.shape[0]):
+        for j in range(3):
+            total[index[i]][j] += addition[i][j]
 
 @jit(nopython=True, cache=True)
 def calculate_displacement(centres_of_mass, box_size, res):

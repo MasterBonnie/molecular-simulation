@@ -1,6 +1,8 @@
 import numpy as np
-from numba import vectorize, float64, jit, guvectorize, int16
+from numba import vectorize, float64, jit, guvectorize, int16, prange, int8
 import math
+import perfplot
+
 #import static_state
 
 """ helper/misc. functions and constants """
@@ -36,12 +38,17 @@ ethanol_atoms = ["C","H","H","H","C","H","H","O","H"]
 def angle_to_radian(angle):
     return (angle*np.pi)/180.0
 
-def unit_vector(matrix_):
-    """ 
-    Returns the unit vector of the vector.  
-    if input is matrix does this for each row.
-    """
-    return matrix_/np.linalg.norm(matrix_, ord=2, axis=1, keepdims=True)
+@jit(nopython=True, cache=True)
+def unit_vector(matrix):
+    res = np.zeros(matrix.shape)
+    
+    for i in range(matrix.shape[0]):
+        div = norm(matrix[i,0], matrix[i,1], matrix[i,2])
+        if div > 1e-3:
+            for j in range(3):
+                res[i,j] = matrix[i,j]/div
+
+    return res
 
 def angle_between(v1, v2):
     """ 
@@ -89,30 +96,46 @@ def cartesianprod(x,y):
     return res
 
 
-def neighbor_list(pos, molecule_to_atoms, centre_of_mass, r_cut, box_size, nr_atoms):
+def neighbor_list(pos, molecule_to_atoms, centre_of_mass, r_cut, box_size, nr_atoms, atom_length):
     """
     Returns which atoms are close, based on centres of mass that are withtin 
     r_cut distance of eachother 
     """
-    dis_matrix = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]))
+    dis_matrix = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]), np.int)
     distance_PBC_matrix(centre_of_mass - centre_of_mass[:, np.newaxis], box_size, r_cut, dis_matrix)
 
-    return check_index(dis_matrix, molecule_to_atoms, nr_atoms)
+    return check_index(dis_matrix, molecule_to_atoms, nr_atoms, atom_length)
+
 
 @jit(nopython=True, cache=True)
-def check_index(dis_matrix, molecule_to_atoms, nr_atoms):
+def check_index(dis_matrix, molecule_to_atoms, nr_atoms, atom_length):
     i_1, i_2 = np.nonzero(dis_matrix)
+    n = len(i_1)
 
-    indices = []
+    indices = np.zeros((n*atom_length*atom_length,2), dtype=np.int16)
 
-    for i in range(len(i_1)):
+    for i in range(n):
         atom_2_atom = molecule_to_atoms[i_1[i], i_2[i]]
 
-        for connection in atom_2_atom:
-            if not (connection[0] == nr_atoms or connection[1] == nr_atoms):
-                indices.append(connection)
+        for j in range(atom_2_atom.shape[0]):
+            indices[i*atom_length*atom_length + j] = atom_2_atom[j]
 
     return indices
+
+# @jit(nopython=True, cache=True)
+# def check_index(dis_matrix, molecule_to_atoms, nr_atoms):
+#     i_1, i_2 = np.nonzero(dis_matrix)
+
+#     indices = []
+
+#     for i in range(len(i_1)):
+#         atom_2_atom = molecule_to_atoms[i_1[i], i_2[i]]
+
+#         for connection in atom_2_atom:
+#             if not (connection[0] == nr_atoms or connection[1] == nr_atoms):
+#                 indices.append(connection)
+
+#     return indices
 
 @jit(nopython=True, cache=True)
 def create_list(molecules, fixed_atom_length):
@@ -131,12 +154,12 @@ def create_list(molecules, fixed_atom_length):
     for i in range(n):
         #print(f"working on creating list...  {(100*i)//(len(molecules))} %        ", end="\r")
         for j in range(n):
-            if j > i:
+            if i > j:
                 matrix[i][j] = cartesianprod(molecules[i],molecules[j])
 
     return matrix
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, fastmath=True)
 def norm(x,y,z):
     """ 2-norm of a vector"""
     return math.sqrt(x*x + y*y + z*z)
@@ -154,39 +177,6 @@ def abs_min(x1,x2,x3):
 
     return res
 
-@guvectorize([(float64[:,:,:], float64, float64, float64[:,:])], "(n,n,p),(),()->(n,n)",
-            nopython=True, cache=True)
-def distance_PBC_matrix(diff, box_length, r_cut, res):
-    """
-    Function to compute the distance of a matrix of vectors when considering
-    periodic boundary conditions
-
-    Input:
-        diff: (n,n,3) numpy array of vectors
-        box_length: length of the PBC box, in A
-        res: (n,n) array which will be filled with the distances
-
-    # TODO: combine this with the function below, seemed difficult to get working
-    """
-
-    for i in range(diff.shape[0]):
-        for j in range(diff.shape[0]):
-            if j > i:
-                x = abs_min(diff[i][j][0], 
-                        diff[i][j][0] + box_length, 
-                        diff[i][j][0] - box_length)
-
-                y = abs_min(diff[i][j][1], 
-                        diff[i][j][1] + box_length, 
-                        diff[i][j][1] - box_length) 
-                
-                z = abs_min(diff[i][j][2], 
-                        diff[i][j][2] + box_length, 
-                        diff[i][j][2] - box_length)       
-
-                length = norm(x,y,z)
-                if (0 < length) and (length < r_cut):
-                    res[i][j] = 1
                 
 @guvectorize([(float64[:,:], float64[:,:], float64, float64[:], float64[:,:])], "(n,p),(n,p),()->(n),(n,p)",
             nopython=True, cache=True)
@@ -218,5 +208,75 @@ def distance_PBC(pos_1, pos_2, box_length, res, diff):
         diff[i] = np.array([x,y,z])
         res[i] = norm(x,y,z)
 
+@guvectorize([(float64[:,:,:], float64, float64, int8[:,:])], "(n,n,p),(),()->(n,n)",
+            nopython=True, cache=True)
+def distance_PBC_matrix(diff, box_length, r_cut, res):
+    """
+    Function to compute the distance of a matrix of vectors when considering
+    periodic boundary conditions
+
+    Input:
+        diff: (n,n,3) numpy array of vectors
+        box_length: length of the PBC box, in A
+        res: (n,n) array which will be filled with the distances
+
+    # TODO: combine this with the function below, seemed difficult to get working
+    """
+
+    for i in range(diff.shape[0]):
+        for j in range(diff.shape[0]):
+            if i > j:
+                x = abs_min(diff[i][j][0], 
+                        diff[i][j][0] + box_length, 
+                        diff[i][j][0] - box_length)
+
+                y = abs_min(diff[i][j][1], 
+                        diff[i][j][1] + box_length, 
+                        diff[i][j][1] - box_length) 
+                
+                z = abs_min(diff[i][j][2], 
+                        diff[i][j][2] + box_length, 
+                        diff[i][j][2] - box_length)       
+
+                length = norm(x,y,z)
+                if (0 < length) and (length < r_cut):
+                    res[i][j] = 1
+
+@guvectorize([(float64[:,:], float64, float64, int8[:,:])], "(n,p),(),()->(n,n)",
+            nopython=True, cache=True)
+def distance_PBC_matrix_2(diff, box_length, r_cut, res):
+    """
+    Function to compute the distance of a matrix of vectors when considering
+    periodic boundary conditions
+
+    Input:
+        diff: (n,n,3) numpy array of vectors
+        box_length: length of the PBC box, in A
+        res: (n,n) array which will be filled with the distances
+
+    # TODO: combine this with the function below, seemed difficult to get working
+    """
+
+def dis_matrix_1(data):
+    box_size = 10
+    r_cut = 2
+    dis_matrix = np.zeros((data.shape[0], data.shape[0]), dtype=np.int8)
+    distance_PBC_matrix(data - data[:, np.newaxis], box_size, r_cut, dis_matrix)
+    return dis_matrix
+
+def dis_matrix_2(data):
+    box_size = 10
+    r_cut = 2
+    dis_matrix = np.zeros((data.shape[0], data.shape[0]), dtype=np.int8)
+    distance_PBC_matrix_2(data, box_size, r_cut, dis_matrix)
+    return dis_matrix
+
 if __name__ == "__main__":
-    pass
+    
+    perfplot.show(
+        setup=lambda n: np.random.rand(n,3),
+        kernels=[dis_matrix_1, dis_matrix_2],
+        n_range=[2 ** k for k in range(14)],
+        logx=True,
+        logy=True,
+    )
