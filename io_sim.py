@@ -528,11 +528,11 @@ if __name__ == "__main__":
 
     nr_h20 = 0
     tol_h20 = 1.7
-    nr_ethanol = 2
-    tol_eth = 1.5
-    box_size = 5
-    output_file_xyz = "data/ethanol_small.xyz"
-    output_file_top = "data/ethanol_small.itp"
+    nr_ethanol = 500
+    tol_eth = 1.8
+    box_size = 50
+    output_file_xyz = "data/ethanol_500.xyz"
+    output_file_top = "data/ethanol_500.itp"
 
     create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
 

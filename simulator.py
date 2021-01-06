@@ -7,10 +7,10 @@ import cProfile
 import io_sim
 from helper import atom_string, random_unit_vector, unit_vector, angle_between, atom_name_to_mass, cartesianprod, create_list, neighbor_list, distance_PBC
 import integrators
-from static_state import centre_of_mass, compute_force, project_pos, kinetic_energy, potential_energy, temperature
+from static_state import centre_of_mass, compute_force, project_pos, kinetic_energy, potential_energy, temperature, compute_force_old
 
 def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, 
-                integrator="vv", write_output = True, fill_in_molecules = 3):
+                integrator="vv", write_output = True, fill_in_molecules = 3, write_output_threshold = 0):
     """
     Numerical integration using either the euler algorithm,
     velocity verlet (vv) algorithm, or the verlet (v) algorithm.
@@ -46,7 +46,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
 
     # Progress bar variables
     total_progress = int(T/dt)
-    progress = 1
+    progress = 0
     
     # Desired temperature 
     T_desired = 298.5 #kelvin
@@ -92,13 +92,6 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
 
     # Open the output file
     with open(file_out, "w") as output_file, open(file_observable, "w") as obs_file:
-        # I/O operations
-        if write_output:
-            output_file.write(f"{nr_atoms}" + '\n')
-            output_file.write("Comments" + '\n')
- 
-            for atom_name, atom in enumerate(pos[:-1]):
-                output_file.write(atom_string(atoms[atom_name], atom))
 
         # If we use the verlet integrator, we take one step using the 
         # Euler algorithm at first. It is easier to do this outside
@@ -124,7 +117,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
         centres_of_mass = centre_of_mass(pos, m, molecules)
         project_pos(centres_of_mass, box_size, pos, molecules)
 
-        lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms, fill_in_molecules)
+        lj_atoms = neighbor_list(molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms, fill_in_molecules)
 
         f = cf*compute_force(pos, bonds, const_bonds, angles,
                         const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms, box_size)
@@ -132,6 +125,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
         while t < T:
             if progress % 10 == 0:
                 io_sim.printProgressBar(progress, total_progress)
+                #pass
 
             # Based on the integrator we update the current pos and v
             # if integrator == "euler":
@@ -148,11 +142,15 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
 
                 centres_of_mass = centre_of_mass(pos, m, molecules)
                 project_pos(centres_of_mass, box_size, pos, molecules)
-                lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms, fill_in_molecules)
+                lj_atoms = neighbor_list(molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms, fill_in_molecules)
 
                 f_old = f
+                #f = cf*compute_force_old(pos, bonds, const_bonds, angles,
+                #                    const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms, box_size)
                 f = cf*compute_force(pos, bonds, const_bonds, angles,
                                     const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms, box_size)
+                #print(np.allclose(f, f_test))
+
                 v = integrators.integrator_velocity_verlet_vel(v, f_old, f, m[:-1], dt)
 
             # elif integrator == "v":
@@ -174,7 +172,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
 
             v = Lambda*v
 
-            if write_output:
+            if write_output and progress/total_progress > write_output_threshold:
                 # I/O operations
                 # energy_potential, energy_bond, energy_angle, energy_dihedral = potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
                 #         box_size)
@@ -198,15 +196,16 @@ if __name__ == "__main__":
     T = 10 # 10^-13 s
     r_cut = 8 # A
     box_size = 50 # A
-    file_xyz = "data/ethanol.xyz"
-    file_top = "data/ethanol.itp"
+    file_xyz = "data/water.xyz"
+    file_top = "data/water.itp"
     file_out = "output/result.xyz"
     file_observable = "output/result_phase.csv"
     integrator = "vv"
     write_output = True
+    write_output_threshold = 0
 
     #NOTE: DO NOT FORGET TO CHANGE THIS 
-    fill_in_molecules = 9
+    fill_in_molecules = 3
 
-    cProfile.run("integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output, fill_in_molecules)")
-    #integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output, fill_in_molecules)
+    cProfile.run("integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output, fill_in_molecules, write_output_threshold)")
+    #integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output, fill_in_molecules, write_output_threshold)
