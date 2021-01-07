@@ -1,8 +1,8 @@
 import numpy as np
 import math
-from collections import deque
 from numba import vectorize, float64, jit, guvectorize, double
 import cProfile
+import time
 
 import io_sim
 from helper import atom_string, random_unit_vector, unit_vector, angle_between, atom_name_to_mass, cartesianprod, create_list, neighbor_list, distance_PBC
@@ -145,7 +145,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
                 lj_atoms = neighbor_list(molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms, fill_in_molecules)
 
                 f_old = f
-                #f = cf*compute_force_old(pos, bonds, const_bonds, angles,
+                #f = cf*compute_force(pos, bonds, const_bonds, angles,
                 #                    const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms, box_size)
                 f = cf*compute_force(pos, bonds, const_bonds, angles,
                                     const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms, box_size)
@@ -174,11 +174,11 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
 
             if write_output and progress/total_progress > write_output_threshold:
                 # I/O operations
-                # energy_potential, energy_bond, energy_angle, energy_dihedral = potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
-                #         box_size)
-                # energy_total = energy_kinetic + energy_potential
+                energy_potential, energy_bond, energy_angle, energy_dihedral = potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
+                         box_size)
+                energy_total = energy_kinetic + energy_potential
 
-                # obs_file.write(f"{energy_potential}, {energy_kinetic}, {energy_total}, {energy_bond}, {energy_angle}, {energy_dihedral}, {temp} \n")
+                obs_file.write(f"{energy_potential}, {energy_kinetic}, {energy_total}, {energy_bond}, {energy_angle}, {energy_dihedral}, {temp} \n")
 
                 output_file.write(f"{nr_atoms}" + '\n')
                 output_file.write("Comments" + '\n')
@@ -194,18 +194,22 @@ if __name__ == "__main__":
     # Water file
     dt = 0.02 # 0.1 ps
     T = 10 # 10^-13 s
-    r_cut = 8 # A
+    r_cut = 6 # A
     box_size = 50 # A
     file_xyz = "data/water.xyz"
     file_top = "data/water.itp"
     file_out = "output/result.xyz"
     file_observable = "output/result_phase.csv"
     integrator = "vv"
-    write_output = True
+    write_output = False
     write_output_threshold = 0
 
     #NOTE: DO NOT FORGET TO CHANGE THIS 
     fill_in_molecules = 3
 
+    #time_1 = time.time()
     cProfile.run("integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output, fill_in_molecules, write_output_threshold)")
     #integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output, fill_in_molecules, write_output_threshold)
+
+    #time_2 = time.time()
+    #print(f"Seconds: {1000*(time_2 - time_1)}")

@@ -8,7 +8,7 @@ from helper import unit_vector, angle_between, distance_PBC, norm, dot_product, 
 # TODO: rewrite this as numba function, using jit
 # This might be difficult as numba does not like lists of lists, such as molecules
 # otherwise rewrite as numpy function, without the loop
-@jit(nopython=True, cache=True, parallel=True)
+@jit(nopython=True, cache=True)
 def centre_of_mass(pos, m, molecules):
     """
     Computes the centre of mass for each molecule
@@ -23,7 +23,7 @@ def centre_of_mass(pos, m, molecules):
     """
     centre_of_mass = np.zeros((molecules.shape[0], 3))
 
-    for i in prange(molecules.shape[0]):
+    for i in range(molecules.shape[0]):
         molecule = molecules[i]
         M = np.sum(m[molecule])
 
@@ -35,15 +35,17 @@ def centre_of_mass(pos, m, molecules):
 
     return centre_of_mass
 
+@jit(nopython=True, cache=True)
 def kinetic_energy(v, m):
     """
     Computes the kinetic energy of the system
     """
-    dot = np.einsum('ij,ij->i', v, v)
+    dot = dot_product(v, v)
     summands = np.multiply(dot, m)
     cf = 1.6605*6.022e-1 
     return cf*0.5*np.sum(summands)
 
+@jit(nopython=True, cache=True)
 def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
                     box_size):
     """
@@ -56,7 +58,7 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
     # Difference vectors for the bonds, and the
     # distance between these atoms
     diff = pos[bonds[:,0]] - pos[bonds[:,1]]
-    dis = np.linalg.norm(diff, axis=1)
+    dis = r_norm(diff)
 
     # Calculate the energy between the atoms
     energy_bond = np.multiply(0.5*const_bonds[:,0], np.power((dis - const_bonds[:,1]),2))
@@ -69,7 +71,7 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
     # The difference vectors we need for the angles
     diff_1 = pos[angles[:,1]] - pos[angles[:,0]]
     diff_2 = pos[angles[:,1]] - pos[angles[:,2]]
-    ang = angle_between(diff_1, diff_2)
+    ang = angle_between_jit(diff_1, diff_2)
     
     # The constant we need for the force calculation
     energy_angle = np.multiply(0.5*const_angles[:,0], np.power((ang - const_angles[:,1]),2))
@@ -83,12 +85,7 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
         diff = np.zeros((lj_atoms.shape[0], 3))
         dis = np.zeros(diff.shape[0])
         distance_PBC(pos[lj_atoms[:,0]], pos[lj_atoms[:,1]],  box_size, dis, diff)
-
-        term = np.true_divide(lj_sigma[lj_atoms[:,0], lj_atoms[:,1]], dis)
-        term_1 = np.power(term, 6)
-
-        energy_lj = np.multiply(lj_eps[lj_atoms[:,0], lj_atoms[:,1]], np.power(term_1, 2) - term_1)
-        energy += np.sum(energy_lj)
+        energy += lj_energy(dis, lj_atoms, lj_eps, lj_sigma, nr_atoms)
 
     if dihedrals is not None:
         i = pos[dihedrals[:,0]]
@@ -99,13 +96,19 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
         # Using https://www.rug.nl/research/portal/files/3251566/c5.pdf
         # Equations (5.3a) for the dihederal angle
 
-        f_l = cross(k - j, k - l)
-        sign_angle = np.sign(np.einsum('ij,ij->i', i-j, f_l))
+        ij = i - j
+        kj = k - j
+        kl = k - l
 
-        R = (i - j) - np.einsum('ij,ij->i', i-j, unit_vector(k - j))[:, np.newaxis]*unit_vector(k - j)
-        S = (l - k) - np.einsum('ij,ij->i', l-k, unit_vector(k - j))[:, np.newaxis]*unit_vector(k - j)
+        f_l = cross(kj, kl)
+        sign_angle = np.sign(dot_product(ij, f_l))
 
-        psi = sign_angle*angle_between(R,S) - np.pi
+        kj_norm = unit_vector(kj)
+
+        R = (ij) - sv_mult(dot_product(ij, kj_norm), kj_norm)
+        S = (-kl) - sv_mult(dot_product(-kl, kj_norm), kj_norm)
+
+        psi = sign_angle*angle_between(R,S) - np.pi  
         
         C_1 = const_dihedrals[:,0]
         C_2 = const_dihedrals[:,1]
@@ -114,7 +117,7 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
         energy_dihedral = 0.5*(C_1*(1.0 + np.cos(psi)) + C_2*(1.0 - np.cos(2*psi)) + C_3*(1.0 + np.cos(3*psi)) + C_4*(1.0 - np.cos(4*psi)))
         energy += np.sum(energy_dihedral)
     else:
-        energy_dihedral = np.array([])
+        energy_dihedral = np.zeros((1))
 
     return energy, np.sum(energy_bond), np.sum(energy_angle), np.sum(energy_dihedral)
 
@@ -434,7 +437,7 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
         f_l = cross(kj, kl)
 
         # The einsum takes the row-wise inner product of a matrix
-        sign_angle = np.sign(dot_product(i-j, f_l))
+        sign_angle = np.sign(dot_product(ij, f_l))
 
         kj_norm = unit_vector(kj)
 
@@ -451,7 +454,7 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
         force_i = -sv_mult(magnitude*(r_kj/r_norm(f_i)), unit_vector(f_i))
         force_l =  sv_mult(magnitude*(r_kj/r_norm(f_l)), unit_vector(f_l))
 
-        term = sv_mult(np.reciprocal(r_kj**2), sv_mult(dot_product(ij, kj), force_i) - sv_mult(dot_product( kl, kj),force_l))
+        term = sv_mult(np.reciprocal(r_kj**2), sv_mult(dot_product(ij, kj), force_i) - sv_mult(dot_product(kl, kj),force_l))
 
         force_j = -force_i + term
         force_k = -force_l - term
@@ -520,6 +523,22 @@ def lj_force(dis, direction, lj_atoms, lj_eps, lj_sigma, nr_atoms):
             force_2[lj_atoms[i,1],j] += -magnitudes*direction[i,j]
     
     return force_1, force_2
+
+@jit(nopython=True, cache=True, fastmath=True)
+def lj_energy(dis, lj_atoms, lj_eps, lj_sigma, nr_atoms):
+    energy = 0
+    for i in range(lj_atoms.shape[0]):
+        if lj_atoms[i,0] == nr_atoms:
+            break
+        if lj_atoms[i,1] == nr_atoms:
+            break
+
+        term = lj_sigma[lj_atoms[i,0],lj_atoms[i,1]] / dis[i]
+        term = np.power(term, 6)
+
+        energy += lj_eps[lj_atoms[i,0],lj_atoms[i,1]]*(term**2 - term)
+
+    return energy
 
 @jit(nopython=True, cache=True)
 def add_jit(total, index, addition):
