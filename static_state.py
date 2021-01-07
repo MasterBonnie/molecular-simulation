@@ -108,7 +108,7 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
         R = (ij) - sv_mult(dot_product(ij, kj_norm), kj_norm)
         S = (-kl) - sv_mult(dot_product(-kl, kj_norm), kj_norm)
 
-        psi = sign_angle*angle_between(R,S) - np.pi  
+        psi = sign_angle*angle_between_jit(R,S) - np.pi  
         
         C_1 = const_dihedrals[:,0]
         C_2 = const_dihedrals[:,1]
@@ -444,7 +444,7 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
         R = (ij) - sv_mult(dot_product(ij, kj_norm), kj_norm)
         S = (-kl) - sv_mult(dot_product(-kl, kj_norm), kj_norm)
 
-        psi = sign_angle*angle_between(R,S) - np.pi  
+        psi = sign_angle*angle_between_jit(R,S) - np.pi  
 
         # Derivative of the potential 
         magnitude = -0.5*(C_1*np.sin(psi) - 2*C_2*np.sin(2*psi) + 3*C_3*np.sin(3*psi) - 4*C_4*np.sin(4*psi))

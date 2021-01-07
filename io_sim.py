@@ -369,9 +369,85 @@ def create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_x
         dihedrals = []
 
         pos = []
+        for i in range(nr_ethanol):
+            print(f"{i}th ethanol molecule", end="\r")
+            random_displacement = np.random.uniform(0, box_size, (3))
+            ethanol = np.asarray([ethanol_patern[i] + random_displacement for i in range(9)])
+
+
+            while check_placement_per_atom(ethanol, pos, box_size, tol_eth):
+                random_displacement = np.random.uniform(0, box_size, (3))
+                ethanol = np.asarray([ethanol_patern[i] + random_displacement for i in range(9)])
+
+            for atom in ethanol:
+                pos.append(atom)
+
+            for j, atom in enumerate(ethanol_atoms):
+                xyz_file.write(helper.atom_string(atom, ethanol[j]))
+
+            bonds.append(f"{9*i } {9*i + 1 } 2845.12 1.09 \n")
+            bonds.append(f"{9*i } {9*i + 2 } 2845.12 1.09 \n")
+            bonds.append(f"{9*i } {9*i + 3 } 2845.12 1.09 \n")
+            bonds.append(f"{9*i + 4 } {9*i + 5 } 2845.12 1.09 \n")
+            bonds.append(f"{9*i + 4 } {9*i + 6 } 2845.12 1.09 \n")
+
+            bonds.append(f"{9*i } {9*i + 4 } 2242.624 1.529 \n")
+
+            bonds.append(f"{9*i + 4 } {9*i + 7 } 2677.76 1.41 \n")
+
+            bonds.append(f"{9*i + 7 } {9*i + 8 } 4626.50 0.945  \n")
+
+            angles.append(f"{9*i + 1 } {9*i } {9*i + 4 } 292.88 {helper.angle_to_radian(108.5)} \n")
+            angles.append(f"{9*i + 2 } {9*i } {9*i + 4 } 292.88 {helper.angle_to_radian(108.5)} \n")
+            angles.append(f"{9*i + 3 } {9*i } {9*i + 4 } 292.88 {helper.angle_to_radian(108.5)} \n")
+
+            angles.append(f"{9*i + 3 } {9*i } {9*i + 2 } 276.144 {helper.angle_to_radian(107.8)} \n")
+            angles.append(f"{9*i + 3 } {9*i } {9*i + 1 } 276.144 {helper.angle_to_radian(107.8)} \n")
+            angles.append(f"{9*i + 2 } {9*i } {9*i + 1 } 276.144 {helper.angle_to_radian(107.8)} \n")
+            angles.append(f"{9*i + 5 } {9*i + 4 } {9*i + 6 } 276.144 {helper.angle_to_radian(107.8)} \n")
+
+            angles.append(f"{9*i } {9*i + 4 } {9*i + 6 } 313.8 {helper.angle_to_radian(110.7)} \n")
+            angles.append(f"{9*i } {9*i + 4 } {9*i + 5 } 313.8 {helper.angle_to_radian(110.7)} \n")
+
+            angles.append(f"{9*i } {9*i + 4 } {9*i + 7 } 414.4 {helper.angle_to_radian(109.5)} \n")
+
+            angles.append(f"{9*i + 4 } {9*i + 7 } {9*i + 8 } 460.24 {helper.angle_to_radian(108.5)} \n")
+
+            angles.append(f"{9*i + 5 } {9*i + 4 } {9*i + 7 } 292.88 {helper.angle_to_radian(109.5)} \n")
+            angles.append(f"{9*i + 6 } {9*i + 4 } {9*i + 7 } 292.88 {helper.angle_to_radian(109.5)}\n")
+
+
+            LJ.append(f"{9*i } 3.5 0.276144 \n")
+            LJ.append(f"{9*i + 4 } 3.5 0.276144 \n")
+
+            LJ.append(f"{9*i + 1 } 2.5 0.12552 \n")
+            LJ.append(f"{9*i + 2 } 2.5 0.12552 \n")
+            LJ.append(f"{9*i + 3 } 2.5 0.12552 \n")
+            LJ.append(f"{9*i + 5 } 2.5 0.12552 \n")
+            LJ.append(f"{9*i + 6 } 2.5 0.12552 \n")
+
+            LJ.append(f"{9*i + 7 } 3.12 0.71128 \n")
+
+            molecules.append(f"{9*i } {9*i + 1 } {9*i + 2 } {9*i + 3 } {9*i + 4 } {9*i + 5 } {9*i + 6 } {9*i + 7 } {9*i + 8 } \n")
+
+            dihedrals.append(f"{9*i + 1 } {9*i } {9*i + 4 } {9*i + 5 } 0.6276 1.8828 0.0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 2 } {9*i } {9*i + 4 } {9*i + 5 } 0.6276 1.8828 0.0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 3 } {9*i } {9*i + 4 } {9*i + 5 } 0.6276 1.8828 0.0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 1 } {9*i } {9*i + 4 } {9*i + 6 } 0.6276 1.8828 0.0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 2 } {9*i } {9*i + 4 } {9*i + 6 } 0.6276 1.8828 0.0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 3 } {9*i } {9*i + 4 } {9*i + 6 } 0.6276 1.8828 0.0 -3.91622 \n")
+
+            dihedrals.append(f"{9*i + 1 } {9*i } {9*i + 4 } {9*i + 7 } 0.97905 2.93716 0.0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 2 } {9*i } {9*i + 4 } {9*i + 7 } 0.97905 2.93716 0.0 -3.91622 \n")
+            dihedrals.append(f"{9*i + 3 } {9*i } {9*i + 4 } {9*i + 7 } 0.97905 2.93716 0.0 -3.91622 \n")
+
+            dihedrals.append(f"{9*i } {9*i + 4 } {9*i + 7 } {9*i + 8 } -0.4431 3.83255 0.72801 -4.11705 \n")
+
+            dihedrals.append(f"{9*i + 5 } {9*i + 4 } {9*i + 7 } {9*i + 8 } 0.94140 2.82420 0.0 -3.76560 \n")
+            dihedrals.append(f"{9*i + 6 } {9*i + 4 } {9*i + 7 } {9*i + 8 } 0.94140 2.82420 0.0 -3.76560 \n")
 
         for i in range(nr_h20):
-            print(f"{i}th water molecule", end="\r")
+            print(f"{i}th water molecule      ", end="\r")
             random_displacement = np.random.uniform(0, box_size, (3))
             water = np.asarray([water_patern[0] + random_displacement,
                                water_patern[1] + random_displacement,
@@ -391,97 +467,18 @@ def create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_x
 
             for j, atom in enumerate(water_atoms):
                 xyz_file.write(helper.atom_string(atom, water[j]))
+            
+            index = i + 3*nr_ethanol
 
+            bonds.append(f"{3*index} {3*index+1} 5024.16 0.9572 \n")
+            bonds.append(f"{3*index} {3*index+2} 5024.16 0.9572 \n")
 
-            bonds.append(f"{3*i} {3*i+1} 5024.16 0.9572 \n")
-            bonds.append(f"{3*i} {3*i+2} 5024.16 0.9572 \n")
+            angles.append(f"{3*index+1} {3*index} {3*index+2} 628.02 1.8242181 \n")
 
-            angles.append(f"{3*i+1} {3*i} {3*i+2} 628.02 1.8242181 \n")
+            LJ.append(f"{3*index} 3.15061 0.66386 \n")
 
-            LJ.append(f"{3*i} 3.15061 0.66386 \n")
+            molecules.append(f"{3*index} {3*index+1} {3*index+2} \n")
 
-            molecules.append(f"{3*i} {3*i+1} {3*i+2} \n")
-
-        for i in range(nr_ethanol):
-            print(f"{i}th ethanol molecule", end="\r")
-            random_displacement = np.random.uniform(0, box_size, (3))
-            ethanol = np.asarray([ethanol_patern[i] + random_displacement for i in range(9)])
-
-
-            while check_placement_per_atom(ethanol, pos, box_size, tol_eth):
-                random_displacement = np.random.uniform(0, box_size, (3))
-                ethanol = np.asarray([ethanol_patern[i] + random_displacement for i in range(9)])
-
-            for atom in ethanol:
-                pos.append(atom)
-
-            for j, atom in enumerate(ethanol_atoms):
-                xyz_file.write(helper.atom_string(atom, ethanol[j]))
-
-            # Correctly offset counter
-
-            bonds.append(f"{9*i + 3*nr_h20} {9*i + 1 + 3*nr_h20} 2845.12 1.09 \n")
-            bonds.append(f"{9*i + 3*nr_h20} {9*i + 2 + 3*nr_h20} 2845.12 1.09 \n")
-            bonds.append(f"{9*i + 3*nr_h20} {9*i + 3 + 3*nr_h20} 2845.12 1.09 \n")
-            bonds.append(f"{9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 2845.12 1.09 \n")
-            bonds.append(f"{9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 2845.12 1.09 \n")
-
-            bonds.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} 2242.624 1.529 \n")
-
-            bonds.append(f"{9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 2677.76 1.41 \n")
-
-            bonds.append(f"{9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 4626.50 0.945  \n")
-
-            angles.append(f"{9*i + 1 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} 292.88 {helper.angle_to_radian(108.5)} \n")
-            angles.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} 292.88 {helper.angle_to_radian(108.5)} \n")
-            angles.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} 292.88 {helper.angle_to_radian(108.5)} \n")
-
-            angles.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 2 + 3*nr_h20} 276.144 {helper.angle_to_radian(107.8)} \n")
-            angles.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 1 + 3*nr_h20} 276.144 {helper.angle_to_radian(107.8)} \n")
-            angles.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 1 + 3*nr_h20} 276.144 {helper.angle_to_radian(107.8)} \n")
-            angles.append(f"{9*i + 5 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 276.144 {helper.angle_to_radian(107.8)} \n")
-
-            angles.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 313.8 {helper.angle_to_radian(110.7)} \n")
-            angles.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 313.8 {helper.angle_to_radian(110.7)} \n")
-
-            angles.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 414.4 {helper.angle_to_radian(109.5)} \n")
-
-            angles.append(f"{9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 460.24 {helper.angle_to_radian(108.5)} \n")
-
-            angles.append(f"{9*i + 5 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 292.88 {helper.angle_to_radian(109.5)} \n")
-            angles.append(f"{9*i + 6 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 292.88 {helper.angle_to_radian(109.5)}\n")
-
-
-            LJ.append(f"{9*i + 3*nr_h20} 3.5 0.276144 \n")
-            LJ.append(f"{9*i + 4 + 3*nr_h20} 3.5 0.276144 \n")
-
-            LJ.append(f"{9*i + 1 + 3*nr_h20} 2.5 0.12552 \n")
-            LJ.append(f"{9*i + 2 + 3*nr_h20} 2.5 0.12552 \n")
-            LJ.append(f"{9*i + 3 + 3*nr_h20} 2.5 0.12552 \n")
-            LJ.append(f"{9*i + 5 + 3*nr_h20} 2.5 0.12552 \n")
-            LJ.append(f"{9*i + 6 + 3*nr_h20} 2.5 0.12552 \n")
-
-            LJ.append(f"{9*i + 7 + 3*nr_h20} 3.12 0.71128 \n")
-
-            molecules.append(f"{9*i + 3*nr_h20} {9*i + 1 + 3*nr_h20} {9*i + 2 + 3*nr_h20} {9*i + 3 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} {9*i + 6 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} \n")
-
-            dihedrals.append(f"{9*i + 1 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 0.6276 1.8828 0.0 -3.91622 \n")
-            dihedrals.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 0.6276 1.8828 0.0 -3.91622 \n")
-            dihedrals.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 5 + 3*nr_h20} 0.6276 1.8828 0.0 -3.91622 \n")
-            dihedrals.append(f"{9*i + 1 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 0.6276 1.8828 0.0 -3.91622 \n")
-            dihedrals.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 0.6276 1.8828 0.0 -3.91622 \n")
-            dihedrals.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 6 + 3*nr_h20} 0.6276 1.8828 0.0 -3.91622 \n")
-
-            dihedrals.append(f"{9*i + 1 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 0.97905 2.93716 0.0 -3.91622 \n")
-            dihedrals.append(f"{9*i + 2 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 0.97905 2.93716 0.0 -3.91622 \n")
-            dihedrals.append(f"{9*i + 3 + 3*nr_h20} {9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} 0.97905 2.93716 0.0 -3.91622 \n")
-
-            dihedrals.append(f"{9*i + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} -0.4431 3.83255 0.72801 -4.11705 \n")
-
-            dihedrals.append(f"{9*i + 5 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 0.94140 2.82420 0.0 -3.76560 \n")
-            dihedrals.append(f"{9*i + 6 + 3*nr_h20} {9*i + 4 + 3*nr_h20} {9*i + 7 + 3*nr_h20} {9*i + 8 + 3*nr_h20} 0.94140 2.82420 0.0 -3.76560 \n")
-
-        print()
         # Write to topology file
         top_file.write(f"bonds {2*nr_h20 + 8*nr_ethanol} \n")
         for string in bonds:
@@ -526,13 +523,13 @@ if __name__ == "__main__":
     #pos, atom_names, atoms = read_xyz("data/water_small.xyz")
     #bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals = read_topology("data/water_small.itp", atoms, 5)  
 
-    nr_h20 = 0
+    nr_h20 = 2782
     tol_h20 = 1.7
-    nr_ethanol = 500
+    nr_ethanol = 464
     tol_eth = 1.8
     box_size = 50
-    output_file_xyz = "data/ethanol_500.xyz"
-    output_file_top = "data/ethanol_500.itp"
+    output_file_xyz = "data/ethanol_1000.xyz"
+    output_file_top = "data/ethanol_1000.itp"
 
     create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
 
