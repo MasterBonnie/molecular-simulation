@@ -187,7 +187,6 @@ def radial_distribution_function(xyz_file, top_file, dr, box_size):
         plt.plot([distance[0] for distance in distances], total_rdf)
         plt.show()
 
-
 @jit(nopython=True, cache=True)
 def calculate_rdf(distances, reference_atoms, pos, box_length, density, rdf):
     for i in range(distances.shape[0]):
@@ -209,7 +208,7 @@ def calculate_rdf(distances, reference_atoms, pos, box_length, density, rdf):
         rdf[i] = rdf[i] / ((4*np.pi/3)*(upper**3-lower**3))
         rdf[i] = rdf[i] / density
 
-def read_topology(input):
+def read_topology(input, nr_atoms=0, fixed_atom_length=0):
     """
     Read topology file (.itp) 
     Input:
@@ -288,9 +287,15 @@ def read_topology(input):
         for i in range(nr_molecules):
             line = inputfile.readline()
             line = line.split()
-            molecules.append(line)
-        
-        #molecules = np.asarray(molecules, dtype=np.int)
+
+            if nr_atoms != 0:
+                length = fixed_atom_length - len(line)
+                molecules.append(np.array(line + [nr_atoms for i in range(length)], dtype=np.int16))
+            else:
+                molecules.append(np.array(line, dtype=np.int16))
+
+        if nr_atoms != 0:
+            molecules = np.asarray(molecules, dtype=np.int16)
 
         line = inputfile.readline()
 
@@ -518,17 +523,17 @@ def check_placement_per_atom(molecule, pos, box, tol):
 
 # Testing of the functions
 if __name__ == "__main__":
-    #pos, atom_names, atoms = read_xyz("data/water_top.xyz")
-    #bonds, const_bonds, angles, const_angles, lj, const_lj, molecules = read_topology("data/top.itp")  
+    #pos, atom_names, atoms = read_xyz("data/water_small.xyz")
+    #bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals = read_topology("data/water_small.itp", atoms, 5)  
 
-    nr_h20 = 4165
-    tol_h20 = 1.75
-    nr_ethanol = 0
-    tol_eth = 3
-    box_size = 50 
-    output_file_xyz = "data/water.xyz"
-    output_file_top = "data/water.itp"
+    nr_h20 = 0
+    tol_h20 = 1.7
+    nr_ethanol = 500
+    tol_eth = 1.8
+    box_size = 50
+    output_file_xyz = "data/ethanol_500.xyz"
+    output_file_top = "data/ethanol_500.itp"
 
-    #create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
+    create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
 
-    radial_distribution_function("output/result.xyz", "data/water.itp", 0.05, box_size = 50)
+    #radial_distribution_function("output/result.xyz", "data/water.itp", 0.05, box_size = 50)

@@ -1,6 +1,8 @@
 import numpy as np
-from numba import vectorize, float64, jit, guvectorize, int32
+from numba import vectorize, float64, jit, guvectorize, int16, prange, int8
 import math
+import perfplot
+
 #import static_state
 
 """ helper/misc. functions and constants """
@@ -36,12 +38,17 @@ ethanol_atoms = ["C","H","H","H","C","H","H","O","H"]
 def angle_to_radian(angle):
     return (angle*np.pi)/180.0
 
-def unit_vector(matrix_):
-    """ 
-    Returns the unit vector of the vector.  
-    if input is matrix does this for each row.
-    """
-    return matrix_/np.linalg.norm(matrix_, ord=2, axis=1, keepdims=True)
+@jit(nopython=True, cache=True)
+def unit_vector(matrix):
+    res = np.zeros(matrix.shape)
+    
+    for i in range(matrix.shape[0]):
+        div = norm(matrix[i,0], matrix[i,1], matrix[i,2])
+        if div > 1e-3:
+            for j in range(3):
+                res[i,j] = matrix[i,j]/div
+
+    return res
 
 def angle_between(v1, v2):
     """ 
@@ -56,6 +63,54 @@ def angle_between(v1, v2):
     # We then get the angle from this
     ang = np.arccos(np.clip(dot, -1.0,1.0))
     return ang
+
+@jit(nopython=True, cache=True) 
+def angle_between_jit(arg_1, arg_2):
+    """ 
+    Returns the angle in radians between vectors 'v1' and 'v2'
+    """
+    # Calculates the row-wise dot product between
+    # diff_1 and diff_2
+    v1 = unit_vector(arg_1)
+    v2 = unit_vector(arg_2)
+
+    # We then get the angle from this
+    dot = dot_product(v1,v2)
+    dot_clipped = clip_jit(dot)
+    ang = np.arccos(dot_clipped)
+    return ang
+
+@jit(nopython=True, cache=True)
+def dot_product(arg_1, arg_2):
+    res = np.zeros((arg_1.shape[0]))
+    _dot_product(arg_1, arg_2, res)
+    return res
+
+# @guvectorize([(float64[:,:], float64[:,:], float64[:])], "(n,p),(n,p)->(n)",
+#             nopython=True, cache=True)
+@jit(nopython=True, cache=True)
+def _dot_product(arg_1, arg_2, res):
+    for i in range(arg_1.shape[0]):
+        res[i] = arg_1[i][0]*arg_2[i][0] + arg_1[i][1]*arg_2[i][1] + arg_1[i][2]*arg_2[i][2]
+
+
+@jit(nopython=True, cache=True)
+def clip_jit(arg):
+    res = np.zeros((arg.shape[0]))
+    _clip_jit(arg, res)
+    return res
+
+# @guvectorize([(float64[:], float64[:])], "(n)->(n)",
+#             nopython=True, cache=True)
+@jit(nopython=True, cache=True)
+def _clip_jit(arg, res):
+    for i in range(arg.shape[0]):
+        if arg[i] < -1:
+            res[i] = -1
+        elif arg[i] > 1:
+            res[i] = 1
+        else:
+            res[i] = arg[i]
 
 def random_unit_vector(const = 1):
     """
@@ -77,36 +132,59 @@ def atom_string(atom, pos):
 def atom_name_to_mass(atoms):
     """ converts an atom name to its mass"""
     mass = [atom_mass[atom] for atom in atoms]
-    return np.array(mass)
+    return np.array(mass + [0])
 
 @jit(nopython=True, cache=True)
 def cartesianprod(x,y):
-    res = np.zeros((x.shape[0]*y.shape[0],2), dtype=int32)
+    res = np.zeros((x.shape[0]*y.shape[0],2), dtype=int16)
 
     for i in range(x.shape[0]):
         for j in range(y.shape[0]):
-            res[i*x.shape[0] + j] = np.array([x[i],y[j]], dtype=int32)
+            res[i*x.shape[0] + j] = np.array([x[i],y[j]], dtype=int16)
     return res
 
-def neighbor_list(pos, molecule_to_atoms, centre_of_mass, r_cut, box_size):
+@jit(nopython=True, cache=True)
+def neighbor_list(molecule_to_atoms, centre_of_mass, r_cut, box_size, nr_atoms, atom_length):
     """
     Returns which atoms are close, based on centres of mass that are withtin 
     r_cut distance of eachother 
     """
-    dis_matrix = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]))
-    distance_PBC_matrix(centre_of_mass - centre_of_mass[:, np.newaxis], box_size, dis_matrix)
+    dis_matrix = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]), int8)
+    difference_matrix = matrix_difference(centre_of_mass)
+    distance_PBC_matrix(difference_matrix, box_size, r_cut, dis_matrix)
 
-    adj = (0 < dis_matrix) & (dis_matrix < r_cut)
-    nl =  np.transpose(np.nonzero(adj))
+    indices = check_index(dis_matrix, molecule_to_atoms, nr_atoms, atom_length)
+    return indices
 
-    if nl.size != 0:
-        lj_atoms = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
-    else:
-        lj_atoms = np.array([])
+@jit(nopython=True, cache=True)
+def matrix_difference(arg):
+    res = np.zeros((arg.shape[0], arg.shape[0],3))
 
-    return lj_atoms
+    for i in range(arg.shape[0]):
+        for j in range(arg.shape[0]):
+            for k in range(3):
+                res[i][j][k] = arg[i][k] - arg[j][k]
 
-def create_list(molecules):
+    return res
+    
+
+@jit(nopython=True, cache=True)
+def check_index(dis_matrix, molecule_to_atoms, nr_atoms, atom_length):
+    i_1, i_2 = np.nonzero(dis_matrix)
+    n = len(i_1)
+
+    indices = np.zeros((n*atom_length*atom_length,2), dtype=np.int16)
+
+    for i in range(n):
+        atom_2_atom = molecule_to_atoms[i_1[i], i_2[i]]
+
+        for j in range(atom_2_atom.shape[0]):
+            indices[i*atom_length*atom_length + j] = atom_2_atom[j]
+
+    return indices
+
+@jit(nopython=True, cache=True)
+def create_list(molecules, fixed_atom_length):
     """
     Creates list of what atoms are connected given molecules that are
     connected, i.e. matrix[i][j] is the cartesian product of the atoms 
@@ -115,17 +193,18 @@ def create_list(molecules):
     # NOTE: inefficient double loop, but we only call this once so it is
             not that bad
     """
-    matrix = [[0 for j in range(len(molecules))] for i in range(len(molecules))]
+    n = molecules.shape[0]
+    matrix = np.zeros((n, n, fixed_atom_length**2, 2), dtype=np.int16)
 
-    for i in range(len(molecules)):
-        print(f"working on creating list...  {(100*i)//(len(molecules))} %        ", end="\r")
-        for j in range(len(molecules)):
-            if j > i:
-                matrix[i][j] = cartesianprod(np.array(molecules[i], dtype=np.int), np.array(molecules[j], dtype=np.int))
+    for i in range(n):
+        #print(f"working on creating list...  {(100*i)//(len(molecules))} %        ", end="\r")
+        for j in range(n):
+            if i > j:
+                matrix[i][j] = cartesianprod(molecules[i],molecules[j])
 
     return matrix
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, fastmath=True)
 def norm(x,y,z):
     """ 2-norm of a vector"""
     return math.sqrt(x*x + y*y + z*z)
@@ -143,41 +222,10 @@ def abs_min(x1,x2,x3):
 
     return res
 
-@guvectorize([(float64[:,:,:], float64, float64[:,:])], "(n,n,p),()->(n,n)",
-            nopython=True, cache=True)
-def distance_PBC_matrix(diff, box_length, res):
-    """
-    Function to compute the distance of a matrix of vectors when considering
-    periodic boundary conditions
-
-    Input:
-        diff: (n,n,3) numpy array of vectors
-        box_length: length of the PBC box, in A
-        res: (n,n) array which will be filled with the distances
-
-    # TODO: combine this with the function below, seemed difficult to get working
-    """
-
-    for i in range(diff.shape[0]):
-        for j in range(diff.shape[0]):
-            if j > i:
-                x = abs_min(diff[i][j][0], 
-                        diff[i][j][0] + box_length, 
-                        diff[i][j][0] - box_length)
-
-                y = abs_min(diff[i][j][1], 
-                        diff[i][j][1] + box_length, 
-                        diff[i][j][1] - box_length) 
                 
-                z = abs_min(diff[i][j][2], 
-                        diff[i][j][2] + box_length, 
-                        diff[i][j][2] - box_length)       
-
-                res[i][j] = norm(x,y,z)
-
-
-@guvectorize([(float64[:,:], float64[:,:], float64, float64[:], float64[:,:])], "(n,p),(n,p),()->(n),(n,p)",
-            nopython=True, cache=True)
+# @guvectorize([(float64[:,:], float64[:,:], float64, float64[:], float64[:,:])], "(n,p),(n,p),()->(n),(n,p)",
+#             nopython=True, cache=True)
+@jit(nopython=True, cache=True)
 def distance_PBC(pos_1, pos_2, box_length, res, diff):
     """
     Function to compute the distance between two positions when considering
@@ -206,5 +254,42 @@ def distance_PBC(pos_1, pos_2, box_length, res, diff):
         diff[i] = np.array([x,y,z])
         res[i] = norm(x,y,z)
 
+# @guvectorize([(float64[:,:,:], float64, float64, int8[:,:])], "(n,n,p),(),()->(n,n)",
+#             nopython=True, cache=True)
+@jit(nopython=True, cache=True)
+def distance_PBC_matrix(diff, box_length, r_cut, res):
+    """
+    Function to compute the distance of a matrix of vectors when considering
+    periodic boundary conditions
+
+    Input:
+        diff: (n,n,3) numpy array of vectors
+        box_length: length of the PBC box, in A
+        res: (n,n) array which will be filled with the distances
+
+    # TODO: combine this with the function below, seemed difficult to get working
+    """
+
+    for i in range(diff.shape[0]):
+        for j in range(diff.shape[0]):
+            if i > j:
+                x = abs_min(diff[i][j][0], 
+                        diff[i][j][0] + box_length, 
+                        diff[i][j][0] - box_length)
+
+                y = abs_min(diff[i][j][1], 
+                        diff[i][j][1] + box_length, 
+                        diff[i][j][1] - box_length) 
+                
+                z = abs_min(diff[i][j][2], 
+                        diff[i][j][2] + box_length, 
+                        diff[i][j][2] - box_length)       
+
+                length = norm(x,y,z)
+                if (0 < length) and (length < r_cut):
+                    res[i][j] = 1
+
+
 if __name__ == "__main__":
+    
     pass
