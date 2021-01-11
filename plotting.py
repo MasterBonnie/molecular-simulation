@@ -37,4 +37,4 @@ def plot_debugging(file):
     plt.show()
 
 if __name__ == "__main__":
-    plot_debugging("output/result_phase.csv")
+    plot_debugging("output/result_phase_5nm.csv")

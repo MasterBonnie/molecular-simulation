@@ -7,9 +7,9 @@ import time
 import io_sim
 from helper import atom_string, random_unit_vector, unit_vector, angle_between, atom_name_to_mass, cartesianprod, create_list, neighbor_list, distance_PBC
 import integrators
-from static_state import centre_of_mass, compute_force, project_pos, kinetic_energy, potential_energy, temperature, compute_force_old
+from static_state import centre_of_mass, compute_force, project_pos, kinetic_energy, potential_energy, potential_energy_jit, temperature, compute_force_old
 
-def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, 
+def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, 
                 integrator="vv", write_output = True, fill_in_molecules = 3, write_output_threshold = 0):
     """
     Numerical integration using either the euler algorithm,
@@ -48,9 +48,6 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
     total_progress = int(T/dt)
     progress = 0
     
-    # Desired temperature 
-    T_desired = 298.5 #kelvin
-
     # Converts our force units to the force 
     # with unit amu A (0.1ps)^-2
     cf = 1.6605*6.022e-1 
@@ -83,10 +80,11 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
     v = unit_vector(np.random.uniform(size=[nr_atoms,3]))
     energy_kinetic = kinetic_energy(v,m[:-1])
 
-    temp = temperature(energy_kinetic,nr_atoms)
-    Lambda = np.sqrt(T_desired/temp)
+    if T_desired:
+        temp = temperature(energy_kinetic,nr_atoms)
+        Lambda = np.sqrt(T_desired/temp)
 
-    v = Lambda*v
+        v = Lambda*v
 
     print("Starting with simulation:                       ")
 
@@ -123,7 +121,7 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
                         const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms, box_size)
 
         while t < T:
-            if progress % 10 == 0:
+            if progress % 1000 == 0:
                 io_sim.printProgressBar(progress, total_progress)
                 #pass
 
@@ -168,14 +166,16 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
 
             energy_kinetic = kinetic_energy(v,m[:-1])
             temp = temperature(energy_kinetic,nr_atoms)
-            Lambda = np.sqrt(T_desired/temp)
-
-            v = Lambda*v
+            
+            if T_desired:
+                Lambda = np.sqrt(T_desired/temp)
+                v = Lambda*v
 
             if write_output and progress/total_progress > write_output_threshold:
                 # I/O operations
-                energy_potential, energy_bond, energy_angle, energy_dihedral = potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
+                energy_potential, energy_bond, energy_angle, energy_dihedral = potential_energy_jit(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
                          box_size)
+                         
                 energy_total = energy_kinetic + energy_potential
 
                 obs_file.write(f"{energy_potential}, {energy_kinetic}, {energy_total}, {energy_bond}, {energy_angle}, {energy_dihedral}, {temp} \n")
@@ -192,24 +192,24 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
 if __name__ == "__main__":
 
     # Water file
-    dt = 0.02 # 0.1 ps
-    T = 10 # 10^-13 s
-    r_cut = 6 # A
-    box_size = 50 # A
-    file_xyz = "data/water.xyz"
-    file_top = "data/water.itp"
-    file_out = "output/result.xyz"
-    file_observable = "output/result_phase.csv"
+    dt = 0.010 # 0.1 ps
+    T = 2000 # 10^-13 s
+    r_cut = 7 # A
+    box_size = 30 # A
+    file_xyz = "data/mix_3nm.xyz"
+    file_top = "data/mix_3nm.itp"
+    file_out = "output/result_mix_3nm.xyz"
+    file_observable = "output/result_mix_3nm.csv"
+    T_desired =  298.15   #kelvin     if zero we do not use a thermostat
     integrator = "vv"
-    write_output = False
-    write_output_threshold = 0
-
+    write_output = True
+    write_output_threshold = 0.5
+    
     #NOTE: DO NOT FORGET TO CHANGE THIS 
-    fill_in_molecules = 3
+    fill_in_molecules = 9
 
-    #time_1 = time.time()
-    cProfile.run("integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output, fill_in_molecules, write_output_threshold)")
-    #integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, integrator, write_output, fill_in_molecules, write_output_threshold)
-
-    #time_2 = time.time()
-    #print(f"Seconds: {1000*(time_2 - time_1)}")
+    time_1 = time.time()
+    #cProfile.run("integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, integrator, write_output, fill_in_molecules, write_output_threshold)")
+    integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, integrator, write_output, fill_in_molecules, write_output_threshold)
+    time_2 = time.time()
+    print(f"Seconds: {1000*(time_2 - time_1)}")

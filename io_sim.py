@@ -72,11 +72,11 @@ def radial_distribution_function(xyz_file, top_file, dr, box_size):
     # Select which molecules and atoms we want to find the rdf of
     first_molecule = "water"
     #first_atom = "O"  first molecule is always O
-    second_molecule = "ethanol"
+    second_molecule = "water"
     second_atom = "H"
 
     # Number of reference atoms 
-    nr_reference_atoms = 100
+    nr_reference_atoms = 1000
 
     # We create the appropriate lists to select the right reference
     # atoms and relevant positions
@@ -139,8 +139,10 @@ def radial_distribution_function(xyz_file, top_file, dr, box_size):
     total_rdf = np.zeros((n))
 
     iteration = 0
-    begin = 200
-    end = 225
+    rdf_iteration = 0
+    max_iterations = 10
+    offset = 50000
+    sample_points = [offset + 100*i for i in range(max_iterations)]
 
     with open(xyz_file, "r") as input_file:    
         while True:   
@@ -153,33 +155,35 @@ def radial_distribution_function(xyz_file, top_file, dr, box_size):
             # Comment
             line = input_file.readline()
 
-            if iteration > begin and iteration < end:
+            if iteration in sample_points:
                 # Position stores the positions of all atoms
                 # in one time step
-                pos = np.zeros((nr_atoms, 3))
-                atom_names = []
+                pos = np.zeros((nr_atoms_total, 3))
 
                 for i in range(nr_atoms_total):
                     line = input_file.readline()
                     splittedLine = line.split()
                     pos[i] = np.asarray(splittedLine[1:], np.float)
-                    atom_names.append(splittedLine[0])
                 
                 rdf = np.zeros((n))
                 density = nr_atoms/(box_size**3)
                 calculate_rdf(distances, pos[reference_atoms], pos[pos_index], box_size, density, rdf)
 
-                print(f"{100*(iteration-begin)/(end - begin)} %", end="\r")
+                print(f"{rdf_iteration} of {max_iterations}", end="\r")
                 total_rdf += rdf
+                rdf_iteration += 1
+                if rdf_iteration == max_iterations:
+                    break
 
             else:
-                for i in range(nr_atoms):
+                for i in range(nr_atoms_total):
                     line = input_file.readline()
 
-                
             iteration += 1
+                
 
-        total_rdf = total_rdf/(end - begin)
+
+        total_rdf = total_rdf/(len(sample_points))
         
         # Save rdf calculation in csv file
         np.savetxt("output/rdf/rdf.csv", total_rdf, delimiter=",")
@@ -523,14 +527,14 @@ if __name__ == "__main__":
     #pos, atom_names, atoms = read_xyz("data/water_small.xyz")
     #bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals = read_topology("data/water_small.itp", atoms, 5)  
 
-    nr_h20 = 2782
-    tol_h20 = 1.7
-    nr_ethanol = 464
+    nr_h20 = 601
+    tol_h20 = 1.8
+    nr_ethanol = 100
     tol_eth = 1.8
-    box_size = 50
-    output_file_xyz = "data/ethanol_1000.xyz"
-    output_file_top = "data/ethanol_1000.itp"
+    box_size = 30
+    output_file_xyz = "data/mix_3nm.xyz"
+    output_file_top = "data/mix_3nm.itp"
 
-    create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
+    #create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
 
-    #radial_distribution_function("output/result.xyz", "data/water.itp", 0.05, box_size = 50)
+    radial_distribution_function("output/result_water_5nm.xyz", "data/water.itp", 0.05, box_size = 50)

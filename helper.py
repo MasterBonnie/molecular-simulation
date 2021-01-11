@@ -149,9 +149,13 @@ def neighbor_list(molecule_to_atoms, centre_of_mass, r_cut, box_size, nr_atoms, 
     Returns which atoms are close, based on centres of mass that are withtin 
     r_cut distance of eachother 
     """
-    dis_matrix = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]), int8)
+    dis_matrix = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]), np.int8)
+    #dis_matrix_2 = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]), np.int8)
+
     difference_matrix = matrix_difference(centre_of_mass)
     distance_PBC_matrix(difference_matrix, box_size, r_cut, dis_matrix)
+    #distance_PBC_matrix(centre_of_mass - centre_of_mass[:, np.newaxis], box_size, r_cut, dis_matrix)
+    #distance_PBC_matrix_2(centre_of_mass, box_size, r_cut, dis_matrix)
 
     indices = check_index(dis_matrix, molecule_to_atoms, nr_atoms, atom_length)
     return indices
@@ -286,9 +290,48 @@ def distance_PBC_matrix(diff, box_length, r_cut, res):
                         diff[i][j][2] - box_length)       
 
                 length = norm(x,y,z)
-                if (0 < length) and (length < r_cut):
+                if (length < r_cut):
                     res[i][j] = 1
 
+@jit(nopython=True, cache=True)
+def check_distance(pos_1, pos_2, box_length, r_cut):
+    diff = pos_1 - pos_2
+
+    x = abs_min(diff[0], 
+        diff[0] + box_length, 
+        diff[0] - box_length)
+
+    y = abs_min(diff[1], 
+        diff[1] + box_length, 
+        diff[1] - box_length) 
+
+    z = abs_min(diff[2], 
+        diff[2] + box_length, 
+        diff[2] - box_length)       
+
+    length = norm(x,y,z)
+    if (length < r_cut):
+        return 1
+    else:
+        return 0
+
+@jit(nopython=True, cache=True)
+def distance_PBC_matrix_2(array, box_length, r_cut, res):
+    """
+    Function to compute the distance of a matrix of vectors when considering
+    periodic boundary conditions
+
+    Input:
+        diff: (n,n,3) numpy array of vectors
+        box_length: length of the PBC box, in A
+        res: (n,n) array which will be filled with the distances
+
+    # TODO: combine this with the function below, seemed difficult to get working
+    """
+    for i in range(array.shape[0]):
+        for j in range(array.shape[0]):
+            if i > j:
+                res[i][j] = check_distance(array[i], array[j], box_length, r_cut)
 
 if __name__ == "__main__":
     

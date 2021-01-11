@@ -45,8 +45,82 @@ def kinetic_energy(v, m):
     cf = 1.6605*6.022e-1 
     return cf*0.5*np.sum(summands)
 
-@jit(nopython=True, cache=True)
 def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
+                    box_size):
+    """
+    Calculates the potential energy of the system
+    """
+    energy = 0
+    # print(energy)
+    # Energy due to bonds 
+    #----------------------------------
+    # Difference vectors for the bonds, and the
+    # distance between these atoms
+    diff = pos[bonds[:,0]] - pos[bonds[:,1]]
+    dis = np.linalg.norm(diff, axis=1)
+
+    # Calculate the energy between the atoms
+    energy_bond = np.multiply(0.5*const_bonds[:,0], np.power((dis - const_bonds[:,1]),2))
+    energy += np.sum(energy_bond)
+    # print(energy_bond)
+
+    #----------------------------------
+    # Energy due to angles
+    #----------------------------------
+    # The difference vectors we need for the angles
+    diff_1 = pos[angles[:,1]] - pos[angles[:,0]]
+    diff_2 = pos[angles[:,1]] - pos[angles[:,2]]
+    ang = angle_between(diff_1, diff_2)
+    
+    # The constant we need for the force calculation
+    energy_angle = np.multiply(0.5*const_angles[:,0], np.power((ang - const_angles[:,1]),2))
+    energy += np.sum(energy_angle)
+    # print(energy_angle)
+
+    #----------------------------------
+    # Energy due to LJ interactions
+    #----------------------------------
+    if lj_atoms.shape[0] != 0:
+        diff = np.zeros((lj_atoms.shape[0], 3))
+        dis = np.zeros(diff.shape[0])
+        distance_PBC(pos[lj_atoms[:,0]], pos[lj_atoms[:,1]],  box_size, dis, diff)
+
+        term = np.true_divide(lj_sigma[lj_atoms[:,0], lj_atoms[:,1]], dis)
+        term_1 = np.power(term, 6)
+
+        energy_lj = np.multiply(lj_eps[lj_atoms[:,0], lj_atoms[:,1]], np.power(term_1, 2) - term_1)
+        energy += np.sum(energy_lj)
+
+    if dihedrals is not None:
+        i = pos[dihedrals[:,0]]
+        j = pos[dihedrals[:,1]]
+        k = pos[dihedrals[:,2]]
+        l = pos[dihedrals[:,3]]
+
+        # Using https://www.rug.nl/research/portal/files/3251566/c5.pdf
+        # Equations (5.3a) for the dihederal angle
+
+        f_l = cross(k - j, k - l)
+        sign_angle = np.sign(np.einsum('ij,ij->i', i-j, f_l))
+
+        R = (i - j) - np.einsum('ij,ij->i', i-j, unit_vector(k - j))[:, np.newaxis]*unit_vector(k - j)
+        S = (l - k) - np.einsum('ij,ij->i', l-k, unit_vector(k - j))[:, np.newaxis]*unit_vector(k - j)
+
+        psi = sign_angle*angle_between(R,S) - np.pi
+        
+        C_1 = const_dihedrals[:,0]
+        C_2 = const_dihedrals[:,1]
+        C_3 = const_dihedrals[:,2]
+        C_4 = const_dihedrals[:,3]
+        energy_dihedral = 0.5*(C_1*(1.0 + np.cos(psi)) + C_2*(1.0 - np.cos(2*psi)) + C_3*(1.0 + np.cos(3*psi)) + C_4*(1.0 - np.cos(4*psi)))
+        energy += np.sum(energy_dihedral)
+    else:
+        energy_dihedral = np.array([])
+
+    return energy, np.sum(energy_bond), np.sum(energy_angle), np.sum(energy_dihedral)
+
+@jit(nopython=True, cache=True)
+def potential_energy_jit(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
                     box_size):
     """
     Calculates the potential energy of the system
@@ -132,8 +206,8 @@ def cross(vec1, vec2):
 def cross_(vec1, vec2, result):
     """ Calculate the cross product of array of 3d vectors. """
     for i in range(vec1.shape[0]):
-        a1, a2, a3 = double(vec1[i][0]), double(vec1[i][1]), double(vec1[i][2])
-        b1, b2, b3 = double(vec2[i][0]), double(vec2[i][1]), double(vec2[i][2])
+        a1, a2, a3 = vec1[i][0], vec1[i][1], vec1[i][2]
+        b1, b2, b3 = vec2[i][0], vec2[i][1], vec2[i][2]
         result[i][0] = a2 * b3 - a3 * b2
         result[i][1] = a3 * b1 - a1 * b3
         result[i][2] = a1 * b2 - a2 * b1
