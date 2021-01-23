@@ -265,88 +265,91 @@ def read_topology(input, nr_atoms=0, fixed_atom_length=0):
     """
 
     with open(input, "r") as inputfile:
-        # We read the first line, which tells us how many
-        # bonds there are 
-        line = inputfile.readline()
-        line = line.split()
-        nr_bonds = int(line[1])
-        
-        # create the arrays with correct sizes
-        bonds = np.zeros((nr_bonds, 2), dtype=np.intp)
-        const_bonds = np.zeros((nr_bonds, 2))
 
-        # we fill them by reading the topology file
-        for i in range(nr_bonds):
+        # We set the variables here all to None, so that we 
+        # only need one return statement.
+        bonds = None
+        const_bonds = None
+        angles = None
+        const_angles = None
+        lj = None
+        const_lj = None
+        molecules = None
+        dihedrals = None
+        const_dihedrals = None
+
+
+        while True:
             line = inputfile.readline()
+
+            # There are no more parameters
+            if not line:
+                break
+
             line = line.split()
+            parameter_type = line[0]
+            nr_parameters = int(line[1])
 
-            bonds[i] = np.asarray(line[0:2], dtype=np.intp)
-            const_bonds[i]= np.asarray(line[2:], dtype=np.float)
+            if parameter_type == "bonds":
+                # create the arrays with correct sizes
+                bonds = np.zeros((nr_parameters, 2), dtype=np.intp)
+                const_bonds = np.zeros((nr_parameters, 2))
 
-        line = inputfile.readline()
-        line = line.split()
-        nr_angles = int(line[1])
+                # we fill them by reading the topology file
+                for i in range(nr_parameters):
+                    line = inputfile.readline()
+                    line = line.split()
 
-        angles = np.zeros((nr_angles, 3), dtype=np.intp)
-        const_angles = np.zeros((nr_angles, 2))
+                    bonds[i] = np.asarray(line[0:2], dtype=np.intp)
+                    const_bonds[i]= np.asarray(line[2:], dtype=np.float)
 
-        for i in range(nr_angles):
-            line = inputfile.readline()
-            line = line.split()
+            elif parameter_type == "angles":
+                angles = np.zeros((nr_parameters, 3), dtype=np.intp)
+                const_angles = np.zeros((nr_parameters, 2))
 
-            angles[i] = np.asarray(line[0:3], dtype=np.intc)
-            const_angles[i] = np.asarray(line[3:], dtype=np.float)
+                for i in range(nr_parameters):
+                    line = inputfile.readline()
+                    line = line.split()
 
-        line = inputfile.readline()
-        line = line.split()
-        nr_lj = int(line[1])
+                    angles[i] = np.asarray(line[0:3], dtype=np.intc)
+                    const_angles[i] = np.asarray(line[3:], dtype=np.float)
+            
+            elif parameter_type == "LJ":
+                lj = np.zeros((nr_parameters), dtype=np.int)
+                const_lj = np.zeros((nr_parameters, 2), dtype=np.float)
 
-        lj = np.zeros((nr_lj), dtype=np.int)
-        const_lj = np.zeros((nr_lj, 2), dtype=np.float)
+                for i in range(nr_parameters):
+                    line = inputfile.readline()
+                    line = line.split()
 
-        for i in range(nr_lj):
-            line = inputfile.readline()
-            line = line.split()
+                    lj[i] = np.asarray(line[0], dtype=np.intp)
+                    const_lj[i] = np.asarray(line[1:], dtype=np.float)
 
-            lj[i] = np.asarray(line[0], dtype=np.intp)
-            const_lj[i] = np.asarray(line[1:], dtype=np.float)
+            elif parameter_type == "dihedrals":
+                dihedrals = np.zeros((nr_parameters, 4), dtype=np.int)
+                const_dihedrals = np.zeros((nr_parameters, 4))
 
-        line = inputfile.readline()
-        line = line.split()
-        nr_molecules = int(line[1])
+                for i in range(nr_parameters):
+                    line = inputfile.readline()
+                    line = line.split()
+                    dihedrals[i] = np.asarray(line[0:4], dtype=np.int)
+                    const_dihedrals[i] = np.asarray(line[4:])
 
-        molecules = []
+            elif parameter_type == "molecules":
+                molecules = []
 
-        for i in range(nr_molecules):
-            line = inputfile.readline()
-            line = line.split()
+                for i in range(nr_parameters):
+                    line = inputfile.readline()
+                    line = line.split()
 
-            if nr_atoms != 0:
-                length = fixed_atom_length - len(line)
-                molecules.append(np.array(line + [nr_atoms for i in range(length)], dtype=np.int16))
-            else:
-                molecules.append(np.array(line, dtype=np.int16))
+                    if nr_atoms != 0:
+                        length = fixed_atom_length - len(line)
+                        molecules.append(np.array(line + [nr_atoms for i in range(length)], dtype=np.int16))
+                    else:
+                        molecules.append(np.array(line, dtype=np.int16))
 
-        if nr_atoms != 0:
-            molecules = np.asarray(molecules, dtype=np.int16)
-
-        line = inputfile.readline()
-
-        # if there are no dihedrals in the topology file, we return None for these variables
-        if not line:
-            return bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, None, None
-
-        line = line.split()
-        nr_dihedrals = int(line[1])
-
-        dihedrals = np.zeros((nr_dihedrals, 4), dtype=np.int)
-        const_dihedrals = np.zeros((nr_dihedrals, 4))
-
-        for i in range(nr_dihedrals):
-            line = inputfile.readline()
-            line = line.split()
-            dihedrals[i] = np.asarray(line[0:4], dtype=np.int)
-            const_dihedrals[i] = np.asarray(line[4:])
+                if nr_atoms != 0:
+                    molecules = np.asarray(molecules, dtype=np.int16)
 
     return bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals
 
