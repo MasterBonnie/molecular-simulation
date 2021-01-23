@@ -43,8 +43,7 @@ def plot_debugging(file):
 def plot_integrator_information(file):
     data = np.genfromtxt(file, delimiter = ",")
 
-    plt.plot(data[:,0])
-    plt.plot(data[:,1])
+    plt.plot(data[:,0], data[:,1])
     plt.title("Potential versus Kinetic energy")
     plt.show()
 

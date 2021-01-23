@@ -100,7 +100,7 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
         f, _ = compute_force_and_project(pos, m, cf, molecules, molecule_to_atoms, nr_atoms, bonds, const_bonds, angles,
                     const_angles, lj_sigma, lj_eps, dihedrals, const_dihedrals)
         f_old = f
-        pos_old = pos
+        pos_old = np.copy(pos)
 
         # If we use the verlet integrator, we first take on euler step
         if integrator == "verlet":
@@ -143,10 +143,12 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
                     const_angles, lj_sigma, lj_eps, dihedrals, const_dihedrals)
 
             elif integrator == "verlet":
+                pos_old_temp = np.copy(pos)
                 pos[:-1] = integrators.integrator_verlet_pos(pos[:-1], pos_old[:-1], f, m[:-1], dt)
                 v = integrators.integrator_verlet_vel(pos[:-1], pos_old[:-1], dt)
                 
-                pos_old = pos
+                pos_old = pos_old_temp
+
                 f, lj_atoms = compute_force_and_project(pos, m, cf, molecules, molecule_to_atoms, nr_atoms, bonds, const_bonds, angles,
                     const_angles, lj_sigma, lj_eps, dihedrals, const_dihedrals)
 
