@@ -82,7 +82,7 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
         molecule_to_atoms = create_list(molecules, fill_in_molecules)
 
     # Random initial velocity
-    v = unit_vector(np.random.uniform(size=[nr_atoms,3]))
+    v = 0*unit_vector(np.random.uniform(size=[nr_atoms,3]))
     energy_kinetic = kinetic_energy(v,m[:-1])
 
     if T_desired:
@@ -101,6 +101,13 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
                     const_angles, lj_sigma, lj_eps, dihedrals, const_dihedrals)
         f_old = f
         pos_old = pos
+
+        # If we use the verlet integrator, we first take on euler step
+        if integrator == "verlet":
+            pos[:-1], v = integrators.integrator_euler(pos[:-1], v, f, m[:-1], dt)
+
+            f, _ = compute_force_and_project(pos, m, cf, molecules, molecule_to_atoms, nr_atoms, bonds, const_bonds, angles,
+                const_angles, lj_sigma, lj_eps, dihedrals, const_dihedrals)
 
         while t < T:
             if progress % 1000 == 0:
@@ -169,6 +176,7 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
                 for atom_name, atom in enumerate(pos[:-1]):
                     output_file.write(atom_string(atoms[atom_name], atom))
 
+    print()
     return
 
 def compute_force_and_project(pos, m, cf, molecules, molecule_to_atoms, nr_atoms, bonds, const_bonds, angles,
@@ -209,24 +217,24 @@ def print_simulation_info(dt, T, r_cut, box_size, file_xyz, file_top, file_out, 
 if __name__ == "__main__":
 
     # Water file
-    dt = 0.005 # 0.1 ps
-    T = 1500 # 10^-13 s
+    dt = 0.001 # 0.1 ps
+    T = 10 # 10^-13 s
     r_cut = 7 # A
     box_size = 30 # A
-    file_xyz = "data/mix_3nm_2.xyz"
-    file_top = "data/mix_3nm_2.itp"
-    file_out = "output/result_mix_3nm_2.xyz"
-    file_observable = "output/result_phase_mix_3nm_2.csv"
-    T_desired =  298.15   #kelvin     if zero we do not use a thermostat
-    integrator = "vv"
+    file_xyz = "data/hydrogen.xyz"
+    file_top = "data/hydrogen.itp"
+    file_out = "output/hydrogen_test.xyz"
+    file_observable = "output/hydrogen_test.csv"
+    T_desired =  0 #298.15   #kelvin     if zero we do not use a thermostat
+    integrator = "verlet"
     write_output = True
-    write_output_threshold = 0.75
+    write_output_threshold = 0
     
     #NOTE: DO NOT FORGET TO CHANGE THIS 
-    fill_in_molecules = 9
+    fill_in_molecules = 2
 
     time_1 = time.time()
     #cProfile.run("simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, integrator, write_output, fill_in_molecules, write_output_threshold)")
     simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, integrator, write_output, fill_in_molecules, write_output_threshold)
     time_2 = time.time()
-    print(f"Min: {(time_2 - time_1)/60}")
+    print(f"Total time in min: {(time_2 - time_1)/60}")
