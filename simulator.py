@@ -5,11 +5,11 @@ import cProfile
 import time
 
 import io_sim
-from helper import atom_string, random_unit_vector, unit_vector, angle_between, atom_name_to_mass, cartesianprod, create_list, neighbor_list, distance_PBC
+from helper import atom_string, random_unit_vector, unit_vector,  atom_name_to_mass, cartesianprod, create_list, neighbor_list, distance_PBC, project_pos
 import integrators
-from static_state import centre_of_mass, compute_force, project_pos, kinetic_energy, potential_energy, potential_energy_jit, temperature, compute_force_old
+from static_state import centre_of_mass, compute_force, kinetic_energy, potential_energy_jit, temperature
 
-def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, 
+def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, 
                 integrator="vv", write_output = True, fill_in_molecules = 3, write_output_threshold = 0):
     """
     Numerical integration using either the euler algorithm,
@@ -35,11 +35,10 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
     Output:
         Writes an xyz file to the file located at file_out
     """
-    # Check for correct integrator
-    if integrator not in ["euler", "v", "vv"]:
-        print("No integrator selected")
-        return
 
+    print_simulation_info(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, 
+                integrator, write_output, fill_in_molecules, write_output_threshold)
+    
     print("Initialization of simulation")
 
     t = 0
@@ -91,86 +90,64 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
     # Open the output file
     with open(file_out, "w") as output_file, open(file_observable, "w") as obs_file:
 
-        # If we use the verlet integrator, we take one step using the 
-        # Euler algorithm at first. It is easier to do this outside
-        # the while loop
-        # if integrator == "v":
-        #     centres_of_mass = centre_of_mass(pos, m, molecules)
-        #     lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size)
-
-        #     pos_old = pos
-        #     f = cf*compute_force(pos, bonds, const_bonds, angles,
-        #                     const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms, box_size)
-
-        #     # If we want to calculate something
-        #     if observable_function:
-        #         observable_function(pos, v, f, obs_file)
-            
-        #     pos, v, _ = integrators.integrator_euler(pos, v, f, m, dt)
-            
-        #     t += dt
-        #     progress += 1
-
         # Compute the force on the entire system
-        centres_of_mass = centre_of_mass(pos, m, molecules)
-        project_pos(centres_of_mass, box_size, pos, molecules)
-
-        lj_atoms = neighbor_list(molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms, fill_in_molecules)
-
-        f = cf*compute_force(pos, bonds, const_bonds, angles,
-                        const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms, box_size)
+        f, _ = compute_force_and_project(pos, m, cf, molecules, molecule_to_atoms, nr_atoms, bonds, const_bonds, angles,
+                    const_angles, lj_sigma, lj_eps, dihedrals, const_dihedrals)
+        f_old = f
+        pos_old = pos
 
         while t < T:
             if progress % 1000 == 0:
                 io_sim.printProgressBar(progress, total_progress)
-                #pass
 
-            # Based on the integrator we update the current pos and v
-            # if integrator == "euler":
-            #     pos, v, _ = integrators.integrator_euler(pos, v, f, m, dt)
-
-            #     centres_of_mass = centre_of_mass(pos, m, molecules)
-            #     project_pos(centres_of_mass, box_size, pos, molecules)
-            #     lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size)
-            #     f = cf*compute_force(pos, bonds, const_bonds, angles,
-            #                 const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms, box_size)
-
+            # Select which integrator we use. In general, these follow the same pattern, update the positions and velocity,
+            # and then compute the new force on the system. We also compute lj_atoms for use in calculating the potential energy
             if integrator == "vv":
                 pos[:-1] = integrators.integrator_velocity_verlet_pos(pos[:-1], v, f, m[:-1], dt)
+                
+                f_new, lj_atoms = compute_force_and_project(pos, m, cf, molecules, molecule_to_atoms, nr_atoms, bonds, const_bonds, angles,
+                    const_angles, lj_sigma, lj_eps, dihedrals, const_dihedrals)
 
-                centres_of_mass = centre_of_mass(pos, m, molecules)
-                project_pos(centres_of_mass, box_size, pos, molecules)
-                lj_atoms = neighbor_list(molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms, fill_in_molecules)
+                v = integrators.integrator_velocity_verlet_vel(v, f, f_new, m[:-1], dt)
+
+                f = f_new
+
+            elif integrator == "beeman":
+                pos[:-1] = integrators.integrator_beeman_pos(pos[:-1], v, f, f_old, m[:-1], dt)
+    
+                f_new, lj_atoms = compute_force_and_project(pos, m, cf, molecules, molecule_to_atoms, nr_atoms, bonds, const_bonds, angles,
+                    const_angles, lj_sigma, lj_eps, dihedrals, const_dihedrals)
+
+                v = integrators.integrator_beeman_vel(v, f_new, f, f_old, m[:-1], dt)
 
                 f_old = f
-                #f = cf*compute_force(pos, bonds, const_bonds, angles,
-                #                    const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms, box_size)
-                f = cf*compute_force(pos, bonds, const_bonds, angles,
-                                    const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms, box_size)
-                #print(np.allclose(f, f_test))
+                f = f_new
 
-                v = integrators.integrator_velocity_verlet_vel(v, f_old, f, m[:-1], dt)
+            elif integrator == "euler":
+                pos[:-1], v = integrators.integrator_euler(pos[:-1], v, f, m[:-1], dt)
 
-            # elif integrator == "v":
-            #     pos_old, (pos, _) = pos, integrators.integrator_verlet_pos(pos, pos_old, f, m, dt)
-            #     # This v is the velocity at the previous timestep
-            #     v = integrators.integrator_verlet_vel(pos, pos_old, dt) 
+                f, lj_atoms = compute_force_and_project(pos, m, cf, molecules, molecule_to_atoms, nr_atoms, bonds, const_bonds, angles,
+                    const_angles, lj_sigma, lj_eps, dihedrals, const_dihedrals)
 
-            #     centres_of_mass = centre_of_mass(pos, m, molecules)
-            #     lj_atoms = neighbor_list(pos, molecule_to_atoms, centres_of_mass, r_cut, box_size)
-            #     f = cf*compute_force(pos, bonds, const_bonds, angles,
-            #             const_angles, lj_atoms, lj_sigma, lj_eps, molecules, nr_atoms, box_size)
-            
+            elif integrator == "verlet":
+                pos[:-1] = integrators.integrator_verlet_pos(pos[:-1], pos_old[:-1], f, m[:-1], dt)
+                v = integrators.integrator_verlet_vel(pos[:-1], pos_old[:-1], dt)
+                
+                pos_old = pos
+                f, lj_atoms = compute_force_and_project(pos, m, cf, molecules, molecule_to_atoms, nr_atoms, bonds, const_bonds, angles,
+                    const_angles, lj_sigma, lj_eps, dihedrals, const_dihedrals)
+
             t += dt
             progress += 1
 
-            energy_kinetic = kinetic_energy(v,m[:-1])
-            temp = temperature(energy_kinetic,nr_atoms)
+            energy_kinetic = kinetic_energy(v, m[:-1])
+            temp = temperature(energy_kinetic, nr_atoms)
             
             if T_desired:
                 Lambda = np.sqrt(T_desired/temp)
                 v = Lambda*v
 
+            # We only write output in certain cases, to save on some time, as this is pretty slow.
             if write_output and progress/total_progress > write_output_threshold:
                 # I/O operations
                 energy_potential, energy_bond, energy_angle, energy_dihedral = potential_energy_jit(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
@@ -188,28 +165,60 @@ def integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_obser
 
     return
 
+def compute_force_and_project(pos, m, cf, molecules, molecule_to_atoms, nr_atoms, bonds, const_bonds, angles,
+                    const_angles, lj_sigma, lj_eps, dihedrals, const_dihedrals):
+    centres_of_mass = centre_of_mass(pos, m, molecules)
+    project_pos(centres_of_mass, box_size, pos, molecules)
+
+    lj_atoms = neighbor_list(molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms, fill_in_molecules)
+
+    f = cf*compute_force(pos, bonds, const_bonds, angles,
+                    const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms, box_size)
+
+    return f, lj_atoms
+
+def print_simulation_info(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, 
+                integrator, write_output, fill_in_molecules, write_output_threshold):
+
+    info_string =  f"running simulation with the following variables: \n \n \
+                        Total time: {T} 10^-13 s\n \
+                        Time step: {dt} 10^-13 s\n \
+                        Number of iterations: {T//dt} \n \
+                        \n \
+                        Box_size: {box_size} A \n \
+                        cut off distance: {r_cut} A \n \
+                        \n \
+                        Input file: {file_xyz} \n \
+                        Input top file: {file_top} \n \
+                        Ouput file: {file_out} \n \
+                        Output file energy: {file_observable} \n \
+                        \n \
+                        Integrator: {integrator}\n"
+    print(info_string)
+    print()
+
 # Testing of the functions
 if __name__ == "__main__":
 
     # Water file
-    dt = 0.010 # 0.1 ps
-    T = 2000 # 10^-13 s
+    dt = 0.005 # 0.1 ps
+    T = 1500 # 10^-13 s
     r_cut = 7 # A
     box_size = 30 # A
-    file_xyz = "data/mix_3nm.xyz"
-    file_top = "data/mix_3nm.itp"
-    file_out = "output/result_mix_3nm.xyz"
-    file_observable = "output/result_mix_3nm.csv"
+    file_xyz = "data/mix_3nm_2.xyz"
+    file_top = "data/mix_3nm_2.itp"
+    file_out = "output/result_mix_3nm_2.xyz"
+    file_observable = "output/result_phase_mix_3nm_2.csv"
     T_desired =  298.15   #kelvin     if zero we do not use a thermostat
     integrator = "vv"
     write_output = True
-    write_output_threshold = 0.5
+    write_output_threshold = 0.75
     
     #NOTE: DO NOT FORGET TO CHANGE THIS 
     fill_in_molecules = 9
 
     time_1 = time.time()
-    #cProfile.run("integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, integrator, write_output, fill_in_molecules, write_output_threshold)")
-    integration(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, integrator, write_output, fill_in_molecules, write_output_threshold)
+    #cProfile.run("simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, integrator, write_output, fill_in_molecules, write_output_threshold)")
+    simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, integrator, write_output, fill_in_molecules, write_output_threshold)
     time_2 = time.time()
-    print(f"Seconds: {1000*(time_2 - time_1)}")
+    print(f"Min: {(time_2 - time_1)/60}")
