@@ -24,9 +24,8 @@ def integrator_euler(x, v, f, m, delta_t):
 
     x_new = x + delta_t*v + (delta_t**2 / 2)*np.true_divide(f, m[:, np.newaxis])
     v_new = v + (delta_t) * np.true_divide(f, m[:, np.newaxis])
-    x_update = x_new - x
 
-    return x_new, v_new, x_update
+    return x_new, v_new
 
 def integrator_verlet_pos(x, x_old, f, m, delta_t):
     """
@@ -43,8 +42,8 @@ def integrator_verlet_pos(x, x_old, f, m, delta_t):
     """
 
     x_new = 2*x - x_old + (delta_t**2)*np.true_divide(f, m[:, np.newaxis])
-    x_update = x_new - x
-    return x_new, x_update
+    
+    return x_new
 
 def integrator_verlet_vel(x_new, x_old, delta_t):
     """
@@ -84,7 +83,7 @@ def integrator_velocity_verlet_pos(x, v, f, m, delta_t):
 
 def integrator_velocity_verlet_vel(v, f, f_new, m, delta_t):
     """
-    Applies velocity_verlet time-integration on x
+    Applies velocity_verlet time-integration on v
 
     Input:
         x: Positions
@@ -97,5 +96,44 @@ def integrator_velocity_verlet_vel(v, f, f_new, m, delta_t):
     """
 
     v_new = v + (delta_t/2)*np.true_divide(f_new + f, m[:, np.newaxis])
+
+    return v_new
+
+def integrator_beeman_pos(x, v, f, f_old, m, delta_t):
+    """
+    Applies beeman time-integration on x
+
+    Input:
+        x: Positions
+        v: Velocities
+        f: Force 
+        f_old: Force of previous timestep
+        m: Mass
+        delta_t: Timestep
+    Output:
+        x_new: new position
+    """
+
+    x_new = x + delta_t*v + ( delta_t**2 /6 )*( np.true_divide(4*f - f_old, m[:, np.newaxis]) )
+
+    return x_new
+
+def integrator_beeman_vel(v, f_new, f, f_old, m, delta_t):
+    """
+    Applies beeman time-integration on v
+
+    Input:
+        x: Positions
+        v: Velocities
+        f_new: Force of current timestep
+        f: Force
+        f_old: Force of previous timestep 
+        m: Mass
+        delta_t: Timestep
+    Output:
+        v_new: new velocity
+    """
+
+    v_new = v + (delta_t/6)*( np.true_divide(2*f_new + 5*f - f_old, m[:, np.newaxis]) )
 
     return v_new

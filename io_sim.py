@@ -1,10 +1,11 @@
 import numpy as np
-import json
 
 import static_state
 import helper
 from helper import water_patern, water_atoms, ethanol_patern, ethanol_atoms
 from numba import vectorize, float64, jit, guvectorize, double
+from plotting import setup_matplotlib
+
 
 import matplotlib.pyplot as plt
 
@@ -43,7 +44,6 @@ def read_xyz(input):
 
             # Second line is comments
             line = inputfile.readline()
-            handle_comment(line)
 
             # Position stores the positions of all atoms
             # in one time step
@@ -65,7 +65,9 @@ def read_xyz(input):
 def radial_distribution_function(xyz_file, top_file, dr, box_size):
     """
     Calculates the radial distribution function for a given xyz file
-    Needs an associated topology file
+    Needs an associated topology file to work.
+
+    NOTE: Saves the computed rdf
     """
     _, _, _, _, _, _, molecules, _, _ = read_topology(top_file)
 
@@ -73,9 +75,9 @@ def radial_distribution_function(xyz_file, top_file, dr, box_size):
     first_molecule = "water"
     #first_atom = "O"  first molecule is always O
     second_molecule = "water"
-    second_atom = "H"
+    second_atom = "O"
 
-    # Number of reference atoms 
+    # Number of reference atoms, i.e. atoms to average over
     nr_reference_atoms = 1000
 
     # We create the appropriate lists to select the right reference
@@ -110,7 +112,7 @@ def radial_distribution_function(xyz_file, top_file, dr, box_size):
     if first_molecule == "ethanol":
         reference_atoms = ethanol_o[:nr_reference_atoms]
 
-    # now we define the position list we want to check ( in terms of indices)
+    # now we define the position list we want to check ( in terms of indices )
     if second_molecule == "water":
         if second_atom == "O":
             pos_index = water_o
@@ -123,7 +125,7 @@ def radial_distribution_function(xyz_file, top_file, dr, box_size):
             pos_index = ethanol_o
             nr_atoms = ethanol_o.shape[0]
         if second_atom == "H":
-            pos_index == ethanol_h
+            pos_index = ethanol_h
             nr_atoms = ethanol_h.shape[0]
 
     # r is the maximum distance we check
@@ -138,6 +140,9 @@ def radial_distribution_function(xyz_file, top_file, dr, box_size):
     # Final rdf values
     total_rdf = np.zeros((n))
 
+    # Some variables to keep track of how far we are
+    # important: max_iterations is number of timesteps we average over,
+    #            offset is how far we look in the xyz file
     iteration = 0
     rdf_iteration = 0
     max_iterations = 10
@@ -181,18 +186,19 @@ def radial_distribution_function(xyz_file, top_file, dr, box_size):
 
             iteration += 1
                 
-
-
         total_rdf = total_rdf/(len(sample_points))
         
         # Save rdf calculation in csv file
-        np.savetxt("output/rdf/rdf.csv", total_rdf, delimiter=",")
-        
+        np.savetxt("output/rdf/rdf_water_5nm_O_O.csv", total_rdf, delimiter=",")
+
         plt.plot([distance[0] for distance in distances], total_rdf)
         plt.show()
 
 @jit(nopython=True, cache=True)
 def calculate_rdf(distances, reference_atoms, pos, box_length, density, rdf):
+    """
+    rdf calculation, give the parameters.
+    """
     for i in range(distances.shape[0]):
         lower = distances[i][0]
         upper = distances[i][1]
@@ -214,11 +220,18 @@ def calculate_rdf(distances, reference_atoms, pos, box_length, density, rdf):
 
 def read_topology(input, nr_atoms=0, fixed_atom_length=0):
     """
-    Read topology file (.itp) 
-    Input:
+    Read a topology file from the file at input.
+
+    params:
         input: relative path to the itp file
+        nr_atoms: number of atoms in the simulation
+        fixed_atom_length: if not 0, we fill any molecule to have the 
+                        specified length, in order to pre-allocate some
+                        more arrays in the simulation, and be able to use
+                        numpy and numba more. We fill the molecules up with the
+                        value nr_atoms
     Output:
-        bonds: a nr_bonds x 2 np array, whose rows
+        bonds:  a nr_bonds x 2 np array, whose rows
                 are the pair which have a bond
         const_bonds: a nr_bonds x 2 np array, whose
                 rows contain the constants for the
@@ -229,24 +242,40 @@ def read_topology(input, nr_atoms=0, fixed_atom_length=0):
                 rows contain the constants for the 
                 associated angle in the same row as in 
                 angles
-        lj: a nr_lj x 2 np array, whose rows are the pairs
+        lj:     a nr_lj x 2 np array, whose rows are the pairs
                 between a lj interaction
-        const_lj: a nr_ljx2 np array, whose rows contain the 
+        const_lj: a nr_lj x 2 np array, whose rows contain the 
                 constant for the associated interaction between
                 molecules in the same row as in lj
+        molecules:
+                if fixed_atom_length is not 0:
+                    a nr_molecules x fixed_atom_length np array containing
+                    the index of atoms in one molecule
+                else:
+                    a python list of numpy arrays containing the index of atoms
+                    in one molecule
+        dihedrals:
+                a nr_dihedrals x 4 np array, containing the indices of atoms in one
+                dihedral angle
+        const_dihedrals:
+                a nr_dihedrals x 4 np array, containing the associated constants
 
     NOTE: We assume there are always bonds, angles, lj and molecules,
           dihedrals are optional
     """
 
     with open(input, "r") as inputfile:
+        # We read the first line, which tells us how many
+        # bonds there are 
         line = inputfile.readline()
         line = line.split()
         nr_bonds = int(line[1])
         
+        # create the arrays with correct sizes
         bonds = np.zeros((nr_bonds, 2), dtype=np.intp)
         const_bonds = np.zeros((nr_bonds, 2))
 
+        # we fill them by reading the topology file
         for i in range(nr_bonds):
             line = inputfile.readline()
             line = line.split()
@@ -303,10 +332,10 @@ def read_topology(input, nr_atoms=0, fixed_atom_length=0):
 
         line = inputfile.readline()
 
+        # if there are no dihedrals in the topology file, we return None for these variables
         if not line:
             return bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, None, None
 
-        
         line = line.split()
         nr_dihedrals = int(line[1])
 
@@ -320,19 +349,6 @@ def read_topology(input, nr_atoms=0, fixed_atom_length=0):
             const_dihedrals[i] = np.asarray(line[4:])
 
     return bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals
-
-def handle_comment(line):
-    """ handles comment line of a xyz file"""
-    # Dont know yet what is usefull to do here
-    return 
-
-def read_json(input):
-    """ reads json file and transforms it into a dict """
-    # Possible for later, passing arguments to simulator
-    with open(input) as file:
-        data = json.load(file)
-
-    return data
 
 def printProgressBar(iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
     """
@@ -363,6 +379,7 @@ def create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_x
     Writes to output_file_xyz and output_file_top
     """
     with open(output_file_xyz, "w") as xyz_file, open(output_file_top, "w") as top_file:
+
         xyz_file.write(f"{3*nr_h20 + 9*nr_ethanol} \n")
         xyz_file.write(f"{nr_h20} water molecules and {nr_ethanol} ethanol molecules \n")
 
@@ -371,18 +388,22 @@ def create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_x
         LJ = []
         molecules = []
         dihedrals = []
-
         pos = []
+
+        # We first place the ethanol molecules, because they are bigger
         for i in range(nr_ethanol):
             print(f"{i}th ethanol molecule", end="\r")
             random_displacement = np.random.uniform(0, box_size, (3))
             ethanol = np.asarray([ethanol_patern[i] + random_displacement for i in range(9)])
 
-
+            # We check if any of the atoms in the molecule are too close to any other atoms in already placed
+            # molecules. Any smarter way would probably cost a lot more effort to implement.
             while check_placement_per_atom(ethanol, pos, box_size, tol_eth):
                 random_displacement = np.random.uniform(0, box_size, (3))
                 ethanol = np.asarray([ethanol_patern[i] + random_displacement for i in range(9)])
 
+            # We accepted the molecules placement, so now we add the correct constants to the arrays,
+            # with the correct index
             for atom in ethanol:
                 pos.append(atom)
 
@@ -450,6 +471,7 @@ def create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_x
             dihedrals.append(f"{9*i + 5 } {9*i + 4 } {9*i + 7 } {9*i + 8 } 0.94140 2.82420 0.0 -3.76560 \n")
             dihedrals.append(f"{9*i + 6 } {9*i + 4 } {9*i + 7 } {9*i + 8 } 0.94140 2.82420 0.0 -3.76560 \n")
 
+        # And now we do the same for water
         for i in range(nr_h20):
             print(f"{i}th water molecule      ", end="\r")
             random_displacement = np.random.uniform(0, box_size, (3))
@@ -516,6 +538,9 @@ def distance(pos_1, pos_2, box_length):
     return helper.norm(x,y,z)
 
 def check_placement_per_atom(molecule, pos, box, tol):
+    """
+    Checks if molecule can be placed in the box
+    """
     for com in pos:
         for atom in molecule:
             if distance(atom, com, box) < tol:
@@ -528,13 +553,14 @@ if __name__ == "__main__":
     #bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals = read_topology("data/water_small.itp", atoms, 5)  
 
     nr_h20 = 601
-    tol_h20 = 1.8
+    tol_h20 = 1.82
     nr_ethanol = 100
-    tol_eth = 1.8
+    tol_eth = 1.82
     box_size = 30
-    output_file_xyz = "data/mix_3nm.xyz"
-    output_file_top = "data/mix_3nm.itp"
+    output_file_xyz = "data/mix_3nm_2.xyz"
+    output_file_top = "data/mix_3nm_2.itp"
 
     #create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
 
     radial_distribution_function("output/result_water_5nm.xyz", "data/water.itp", 0.05, box_size = 50)
+    
