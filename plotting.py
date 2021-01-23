@@ -40,6 +40,15 @@ def plot_debugging(file):
     plt.xlabel("T (ns)")
     plt.show()
 
+def plot_integrator_information(file):
+    data = np.genfromtxt(file, delimiter = ",")
+
+    plt.plot(data[:,0])
+    plt.plot(data[:,1])
+    plt.title("Potential versus Kinetic energy")
+    plt.show()
+
+
 def setup_matplotlib():
     """
     For the visual style of the matplotlib plots, call this function
@@ -72,5 +81,8 @@ def setup_matplotlib():
     
 
 setup_matplotlib()
+
+
 if __name__ == "__main__":
-    plot_debugging("output/result_phase_mix_3nm_2_test.csv")
+    #plot_debugging("output/result_phase_mix_3nm_2_test.csv")
+    plot_integrator_information("output/hydrogen_test.csv")

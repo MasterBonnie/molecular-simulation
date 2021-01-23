@@ -88,37 +88,45 @@ def potential_energy_jit(pos, bonds, const_bonds, angles, const_angles, lj_atoms
                         if none are present, equals 0
     """
     energy = 0
+
+    energy_bond = np.zeros((1))
+    energy_angle = np.zeros((1))
+    energy_dihedral = np.zeros((1))
+
     # Energy due to bonds 
     #----------------------------------
-    # Difference vectors for the bonds, and the
-    # distance between these atoms
-    diff = pos[bonds[:,0]] - pos[bonds[:,1]]
-    dis = r_norm(diff)
+    if bonds is not None:
+        # Difference vectors for the bonds, and the
+        # distance between these atoms
+        diff = pos[bonds[:,0]] - pos[bonds[:,1]]
+        dis = r_norm(diff)
 
-    # Calculate the energy between the atoms
-    energy_bond = np.multiply(0.5*const_bonds[:,0], np.power((dis - const_bonds[:,1]),2))
-    energy += np.sum(energy_bond)
+        # Calculate the energy between the atoms
+        energy_bond = np.multiply(0.5*const_bonds[:,0], np.power((dis - const_bonds[:,1]),2))
+        energy += np.sum(energy_bond)
 
     #----------------------------------
     # Energy due to angles
     #----------------------------------
-    # The difference vectors we need for the angles
-    diff_1 = pos[angles[:,1]] - pos[angles[:,0]]
-    diff_2 = pos[angles[:,1]] - pos[angles[:,2]]
-    ang = angle_between_jit(diff_1, diff_2)
-    
-    # The constant we need for the force calculation
-    energy_angle = np.multiply(0.5*const_angles[:,0], np.power((ang - const_angles[:,1]),2))
-    energy += np.sum(energy_angle)
+    if angles is not None:
+        # The difference vectors we need for the angles
+        diff_1 = pos[angles[:,1]] - pos[angles[:,0]]
+        diff_2 = pos[angles[:,1]] - pos[angles[:,2]]
+        ang = angle_between_jit(diff_1, diff_2)
+        
+        # The constant we need for the force calculation
+        energy_angle = np.multiply(0.5*const_angles[:,0], np.power((ang - const_angles[:,1]),2))
+        energy += np.sum(energy_angle)
 
     #----------------------------------
     # Energy due to LJ interactions
     #----------------------------------
-    if lj_atoms.shape[0] != 0:
-        diff = np.zeros((lj_atoms.shape[0], 3))
-        dis = np.zeros(diff.shape[0])
-        distance_PBC(pos[lj_atoms[:,0]], pos[lj_atoms[:,1]],  box_size, dis, diff)
-        energy += lj_energy(dis, lj_atoms, lj_eps, lj_sigma, nr_atoms)
+    if lj_atoms is not None:
+        if lj_atoms.shape[0] != 0:
+            diff = np.zeros((lj_atoms.shape[0], 3))
+            dis = np.zeros(diff.shape[0])
+            distance_PBC(pos[lj_atoms[:,0]], pos[lj_atoms[:,1]],  box_size, dis, diff)
+            energy += lj_energy(dis, lj_atoms, lj_eps, lj_sigma, nr_atoms)
 
     if dihedrals is not None:
         i = pos[dihedrals[:,0]]
@@ -149,8 +157,6 @@ def potential_energy_jit(pos, bonds, const_bonds, angles, const_angles, lj_atoms
         C_4 = const_dihedrals[:,3]
         energy_dihedral = 0.5*(C_1*(1.0 + np.cos(psi)) + C_2*(1.0 - np.cos(2*psi)) + C_3*(1.0 + np.cos(3*psi)) + C_4*(1.0 - np.cos(4*psi)))
         energy += np.sum(energy_dihedral)
-    else:
-        energy_dihedral = np.zeros((1))
 
     return energy, np.sum(energy_bond), np.sum(energy_angle), np.sum(energy_dihedral)
  
