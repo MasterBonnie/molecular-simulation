@@ -197,72 +197,77 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
 
     NOTE: See also the implementation of read_topology in io_sim, and the definitions of lj_sigma 
           and lj_eps in simulator.integration
+    NOTE: Some of these variables might be None, which signifies that there are for example no angles
+          in the molecules we are simulating
     """
     force_total = np.zeros((nr_atoms, 3))
 
 
     # Forces due to bonds between atoms
     #----------------------------------
-    # Difference vectors for the bonds, and the
-    # distance between these atoms
-    diff = pos[bonds[:,0]] - pos[bonds[:,1]]
-    dis = r_norm(diff)
+    if bonds is not None:
+        # Difference vectors for the bonds, and the
+        # distance between these atoms
+        diff = pos[bonds[:,0]] - pos[bonds[:,1]]
+        dis = r_norm(diff)
 
-    # Calculate the forces between the atoms
-    magnitudes = np.multiply(-const_bonds[:,0], dis - const_bonds[:,1])
-    force = sv_mult(magnitudes, unit_vector(diff))
-    
-    # Add them to the total force
-    # np.add.at(force_total, bonds[:,0], force)
-    # np.add.at(force_total, bonds[:,1], -force)
+        # Calculate the forces between the atoms
+        magnitudes = np.multiply(-const_bonds[:,0], dis - const_bonds[:,1])
+        force = sv_mult(magnitudes, unit_vector(diff))
+        
+        # Add them to the total force
+        # np.add.at(force_total, bonds[:,0], force)
+        # np.add.at(force_total, bonds[:,1], -force)
 
-    add_jit(force_total, bonds[:,0], force)
-    add_jit(force_total, bonds[:,1], -force)
+        add_jit(force_total, bonds[:,0], force)
+        add_jit(force_total, bonds[:,1], -force)
 
     #----------------------------------
     # Forces due to angles in molecules
     #----------------------------------
-    # The difference vectors we need for the angles
-    diff_1 = pos[angles[:,1]] - pos[angles[:,0]]
-    dis_1 = r_norm(diff_1)
-    diff_2 = pos[angles[:,1]] - pos[angles[:,2]]
-    dis_2 = r_norm(diff_2)
-    ang = angle_between_jit(diff_1, diff_2)
-    
-    # The constant we need for the force calculation
-    mag_ang = np.multiply(-const_angles[:,0], ang - const_angles[:,1])
+    if angles is not None:
+        # The difference vectors we need for the angles
+        diff_1 = pos[angles[:,1]] - pos[angles[:,0]]
+        dis_1 = r_norm(diff_1)
+        diff_2 = pos[angles[:,1]] - pos[angles[:,2]]
+        dis_2 = r_norm(diff_2)
+        ang = angle_between_jit(diff_1, diff_2)
+        
+        # The constant we need for the force calculation
+        mag_ang = np.multiply(-const_angles[:,0], ang - const_angles[:,1])
 
-    # Calculate the direction vectors for the forces 
-    cross_vector = cross(diff_1, diff_2)
-    angular_force_unit_1 = unit_vector(cross(cross_vector, diff_1))
-    angular_force_unit_2 = -unit_vector(cross(cross_vector, diff_2))
+        # Calculate the direction vectors for the forces 
+        cross_vector = cross(diff_1, diff_2)
+        angular_force_unit_1 = unit_vector(cross(cross_vector, diff_1))
+        angular_force_unit_2 = -unit_vector(cross(cross_vector, diff_2))
 
-    # Actually calculate the forces
-    force_ang_1 = sv_mult(mag_ang / dis_1, angular_force_unit_1)
-    force_ang_2 = sv_mult(mag_ang / dis_2, angular_force_unit_2)
+        # Actually calculate the forces
+        force_ang_1 = sv_mult(mag_ang / dis_1, angular_force_unit_1)
+        force_ang_2 = sv_mult(mag_ang / dis_2, angular_force_unit_2)
 
-    # Add them to the total force
-    add_jit(force_total, angles[:,0], force_ang_1)
-    add_jit(force_total, angles[:,2], force_ang_2)
-    add_jit(force_total, angles[:,1], -(force_ang_1 + force_ang_2))
+        # Add them to the total force
+        add_jit(force_total, angles[:,0], force_ang_1)
+        add_jit(force_total, angles[:,2], force_ang_2)
+        add_jit(force_total, angles[:,1], -(force_ang_1 + force_ang_2))
 
     #----------------------------------
     # Forces due to Lennard Jones interaction
     #----------------------------------
     #if lj_atoms is not empty
-    if lj_atoms.shape[0] != 0:
+    if lj_atoms is not None:
+        if lj_atoms.shape[0] != 0:
 
-        diff = np.zeros((lj_atoms.shape[0], 3))
-        dis = np.zeros(diff.shape[0])
-        distance_PBC(pos[lj_atoms[:,0]], pos[lj_atoms[:,1]], box_size, dis, diff)
+            diff = np.zeros((lj_atoms.shape[0], 3))
+            dis = np.zeros(diff.shape[0])
+            distance_PBC(pos[lj_atoms[:,0]], pos[lj_atoms[:,1]], box_size, dis, diff)
 
-        force_1, force_2 = lj_force(dis, unit_vector(diff), lj_atoms, lj_eps, lj_sigma, nr_atoms)
-        
-        force_total += force_1
-        force_total += force_2
+            force_1, force_2 = lj_force(dis, unit_vector(diff), lj_atoms, lj_eps, lj_sigma, nr_atoms)
+            
+            force_total += force_1
+            force_total += force_2
 
-        # add_jit(force_total, lj_atoms[:,0], force)
-        # add_jit(force_total, lj_atoms[:,1], -force)
+            # add_jit(force_total, lj_atoms[:,0], force)
+            # add_jit(force_total, lj_atoms[:,1], -force)
 
     #----------------------------------
     # Forces due to dihedral angles

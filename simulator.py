@@ -62,18 +62,24 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
     m = atom_name_to_mass(atoms)
 
     # Pre-calculate these, because we need them all anyway, probably
-    lj_sigma = np.zeros(nr_atoms)
-    lj_sigma[lj] = const_lj[:,0]
-    lj_sigma = 0.5*(lj_sigma + lj_sigma[:, np.newaxis])
 
-    # NOTE: multiply with 4 here already
-    lj_eps = np.zeros(nr_atoms)
-    lj_eps[lj] = const_lj[:, 1]
-    lj_eps = 4*np.sqrt(lj_eps*lj_eps[:, np.newaxis])
+    lj_sigma = None
+    lj_eps = None
+    molecule_to_atoms = None
 
-    # Create the conversion from molecules to atoms
-    # This is for the Lennard-Jones potential
-    molecule_to_atoms = create_list(molecules, fill_in_molecules)
+    if lj is not None:
+        lj_sigma = np.zeros(nr_atoms)
+        lj_sigma[lj] = const_lj[:,0]
+        lj_sigma = 0.5*(lj_sigma + lj_sigma[:, np.newaxis])
+
+        # NOTE: multiply with 4 here already
+        lj_eps = np.zeros(nr_atoms)
+        lj_eps[lj] = const_lj[:, 1]
+        lj_eps = 4*np.sqrt(lj_eps*lj_eps[:, np.newaxis])
+
+        # Create the conversion from molecules to atoms
+        # This is for the Lennard-Jones potential
+        molecule_to_atoms = create_list(molecules, fill_in_molecules)
 
     # Random initial velocity
     v = unit_vector(np.random.uniform(size=[nr_atoms,3]))
@@ -170,7 +176,9 @@ def compute_force_and_project(pos, m, cf, molecules, molecule_to_atoms, nr_atoms
     centres_of_mass = centre_of_mass(pos, m, molecules)
     project_pos(centres_of_mass, box_size, pos, molecules)
 
-    lj_atoms = neighbor_list(molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms, fill_in_molecules)
+    lj_atoms = None
+    if molecule_to_atoms is not None:
+        lj_atoms = neighbor_list(molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms, fill_in_molecules)
 
     f = cf*compute_force(pos, bonds, const_bonds, angles,
                     const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms, box_size)
