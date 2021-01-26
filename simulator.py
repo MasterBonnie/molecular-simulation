@@ -5,7 +5,7 @@ import cProfile
 import time
 
 import io_sim
-from helper import atom_string, random_unit_vector, unit_vector,  atom_name_to_mass, cartesianprod, create_list, neighbor_list, distance_PBC, project_pos
+from helper import atom_string, unit_vector,  atom_name_to_mass, create_list, neighbor_list, project_pos
 import integrators
 from static_state import centre_of_mass, compute_force, kinetic_energy, potential_energy_jit, temperature
 
@@ -82,7 +82,7 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
         molecule_to_atoms = create_list(molecules, fill_in_molecules)
 
     # Random initial velocity
-    v = 0*unit_vector(np.random.uniform(size=[nr_atoms,3]))
+    v = unit_vector(np.random.uniform(size=[nr_atoms,3]))
     energy_kinetic = kinetic_energy(v,m[:-1])
 
     if T_desired:
@@ -175,8 +175,12 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
                 output_file.write(f"{nr_atoms}" + '\n')
                 output_file.write("Comments" + '\n')
 
+                position_string = ""
+                
                 for atom_name, atom in enumerate(pos[:-1]):
-                    output_file.write(atom_string(atoms[atom_name], atom))
+                    position_string += atom_string(atoms[atom_name], atom)
+                    
+                output_file.write(position_string)
 
     print()
     return
@@ -201,7 +205,7 @@ def print_simulation_info(dt, T, r_cut, box_size, file_xyz, file_top, file_out, 
     info_string =  f"running simulation with the following variables: \n \n \
                         Total time: {T} 10^-13 s\n \
                         Time step: {dt} 10^-13 s\n \
-                        Number of iterations: {T//dt} \n \
+                        Number of iterations: {int(T/dt)} \n \
                         \n \
                         Box_size: {box_size} A \n \
                         cut off distance: {r_cut} A \n \
@@ -219,21 +223,21 @@ def print_simulation_info(dt, T, r_cut, box_size, file_xyz, file_top, file_out, 
 if __name__ == "__main__":
 
     # Water file
-    dt = 0.001 # 0.1 ps
-    T = 10 # 10^-13 s
+    dt = 0.002 # 0.1 ps
+    T = 1 # 10^-13 s
     r_cut = 7 # A
-    box_size = 30 # A
-    file_xyz = "data/hydrogen.xyz"
-    file_top = "data/hydrogen.itp"
-    file_out = "output/hydrogen_test.xyz"
-    file_observable = "output/hydrogen_test.csv"
-    T_desired =  0 #298.15   #kelvin     if zero we do not use a thermostat
-    integrator = "verlet"
+    box_size = 50 # A
+    file_xyz = "data/water_500.xyz"
+    file_top = "data/water_500.itp"
+    file_out = "output/test.xyz"
+    file_observable = "output/test.csv"
+    T_desired = 298.15   #kelvin     if zero we do not use a thermostat
+    integrator = "vv"
     write_output = True
     write_output_threshold = 0
     
     #NOTE: DO NOT FORGET TO CHANGE THIS 
-    fill_in_molecules = 2
+    fill_in_molecules = 3
 
     time_1 = time.time()
     #cProfile.run("simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, integrator, write_output, fill_in_molecules, write_output_threshold)")
