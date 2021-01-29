@@ -1,6 +1,6 @@
 import numpy as np
 from numba import vectorize, float64, jit, guvectorize, double, prange, int32
-from helper import unit_vector, distance_PBC, norm, dot_product, angle_between_jit, add_jit, sv_mult, r_norm, cross
+from helper import unit_vector, distance_PBC, dot_product, angle_between_jit, add_jit, sv_mult, r_norm, cross
 
 
 """File for extracting/calculating information about a state at a particular time step"""
@@ -43,7 +43,7 @@ def kinetic_energy(v, m):
     return cf*0.5*np.sum(summands)
 
 @jit(nopython=True, cache=True)
-def potential_energy_jit(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
+def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms,
                     box_size):
     """
     Calculates the potential energy of the system
@@ -70,13 +70,6 @@ def potential_energy_jit(pos, bonds, const_bonds, angles, const_angles, lj_atoms
                 a nr_dihedrals x 4 np array, containing the indices of atoms in one
                 dihedral angle
         const_dihedrals: a nr_dihedrals x 4 np array, containing the associated constants
-        molecules:
-                if fixed_atom_length is not 0:
-                    a nr_molecules x fixed_atom_length np array containing
-                    the index of atoms in one molecule
-                else:
-                    a python list of numpy arrays containing the index of atoms
-                    in one molecule
         nr_atoms: number of atoms in the simulation
         box_size: size of the simulation box, in A
 
@@ -341,6 +334,7 @@ def lj_force(dis, direction, lj_atoms, lj_eps, lj_sigma, nr_atoms):
     force_2 = np.zeros((nr_atoms, 3))
 
     for i in range(lj_atoms.shape[0]):
+        # If this is the case, we are dealing with the "virtual particle"
         if lj_atoms[i,0] == nr_atoms:
             break
         if lj_atoms[i,1] == nr_atoms:

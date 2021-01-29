@@ -12,6 +12,7 @@ atom_mass = {
     "C": 12.011
 }
 
+# Template for a water molecule
 water_patern = np.array([
                           [1.93617934,      2.31884508,      1.72261570],
                           [1.78931374,      3.24075634,      1.51114298],
@@ -20,6 +21,7 @@ water_patern = np.array([
 
 water_atoms = ["O", "H", "H"]
 
+# Template for an ethanol molecule
 ethanol_patern = np.array([
                         [0.826028, -0.40038, -0.826028],
                         [1.42445, -1.03723, -0.171629],
@@ -67,6 +69,10 @@ def cross_(vec1, vec2, result):
 def unit_vector(matrix):
     """
     returns unit vector of the input, row-wise
+    if the row is small, we keep that vector the same
+
+    this behaviour is used in the LJ force computation, 
+    these entries are ignored anyway, but we dont want an error
     """
     res = np.zeros(matrix.shape)
     
@@ -244,6 +250,8 @@ def partition_pos(pos, box_size, nr_of_par, max_number_atoms):
 
     return partition
 
+# NOTE: this is slower then the naive method? I dont know why, but it is...
+# the "slowness" seems to come from this function, not the other ones
 @jit(nopython=True, cache=True)
 def neighbor_list_creation(partition, pos, nr_of_par, nr_atoms, box_length, r_cut):
     """
@@ -257,7 +265,7 @@ def neighbor_list_creation(partition, pos, nr_of_par, nr_atoms, box_length, r_cu
     for x in range(nr_of_par):
         for y in range(nr_of_par):
             for z in range(nr_of_par):
-                partition_box = partition[x, y, z]
+                partition_box = partition[x][y][z]
                 for i in range(partition_box[0]):
                     index_p = partition_box[i+1]
                     point = pos[index_p]
@@ -269,7 +277,7 @@ def neighbor_list_creation(partition, pos, nr_of_par, nr_atoms, box_length, r_cu
                             for z_n in range(z-1, z+2):
                                 z_n_p = z_n % nr_of_par
                                 
-                                other_partition_box = partition[x_n_p, y_n_p, z_n_p]
+                                other_partition_box = partition[x_n_p][y_n_p][z_n_p]
 
                                 for j in range(other_partition_box[0]):
                                     index_o = other_partition_box[j+1]
@@ -278,8 +286,8 @@ def neighbor_list_creation(partition, pos, nr_of_par, nr_atoms, box_length, r_cu
                                         other = pos[index_o]
 
                                         if check_distance(point, other, box_length, r_cut):
-                                            indices[0,0] += 1
-                                            indices[indices[0,0]] = [index_p, index_o]
+                                            indices[0][0] += 1
+                                            indices[indices[0][0]] = [index_p, index_o]
     return indices
 
 @jit(nopython=True, cache=True)
@@ -356,9 +364,9 @@ def distance_PBC_matrix(diff, box_length, r_cut, res):
     Input:
         diff: (n,n,3) numpy array of vectors
         box_length: length of the PBC box, in A
+        r_cut: cutoff distance, in A
         res: (n,n) array which will be filled with the distances
 
-    # TODO: combine this with the function below, seemed difficult to get working
     """
 
     for i in range(diff.shape[0]):
@@ -427,24 +435,6 @@ def project_pos(centres_of_mass, box_size, pos, molecules):
         pos[molecule] += displacement[i]
 
     pos[-1] = np.array([0,0,0])
-
-@jit(nopython=True, cache=True)
-def distance_PBC_matrix_2(array, box_length, r_cut, res):
-    """
-    Function to compute the distance of a matrix of vectors when considering
-    periodic boundary conditions
-
-    Input:
-        diff: (n,n,3) numpy array of vectors
-        box_length: length of the PBC box, in A
-        res: (n,n) array which will be filled with the distances
-
-    # TODO: combine this with the function below, seemed difficult to get working
-    """
-    for i in range(array.shape[0]):
-        for j in range(array.shape[0]):
-            if i > j:
-                res[i][j] = check_distance(array[i], array[j], box_length, r_cut)
 
 if __name__ == "__main__":
     

@@ -4,10 +4,10 @@ from numba import vectorize, float64, jit, guvectorize, double
 import cProfile
 import time
 
-import io_sim
+from io_sim import read_topology, read_xyz, printProgressBar
 from helper import atom_string, unit_vector,  atom_name_to_mass, create_list, neighbor_list, project_pos
 import integrators
-from static_state import centre_of_mass, compute_force, kinetic_energy, potential_energy_jit, temperature
+from static_state import centre_of_mass, compute_force, kinetic_energy, potential_energy, temperature
 
 def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, 
                 integrator="vv", write_output = True, fill_in_molecules = 3, write_output_threshold = 0):
@@ -53,8 +53,8 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
 
     # Get all external variables
     print("reading variables...", end="\n")
-    pos, atoms, nr_atoms = io_sim.read_xyz(file_xyz)
-    bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals = io_sim.read_topology(file_top, nr_atoms, fill_in_molecules)
+    pos, atoms, nr_atoms = read_xyz(file_xyz)
+    bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals = read_topology(file_top, nr_atoms, fill_in_molecules)
 
     pos = np.append(pos, [[0,0,0]], axis=0)
 
@@ -62,7 +62,6 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
     m = atom_name_to_mass(atoms)
 
     # Pre-calculate these, because we need them all anyway, probably
-
     lj_sigma = None
     lj_eps = None
     molecule_to_atoms = None
@@ -111,7 +110,7 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
 
         while t < T:
             if progress % 1000 == 0:
-                io_sim.printProgressBar(progress, total_progress)
+                printProgressBar(progress, total_progress)
 
             # Select which integrator we use. In general, these follow the same pattern, update the positions and velocity,
             # and then compute the new force on the system. We also compute lj_atoms for use in calculating the potential energy
@@ -162,10 +161,10 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
                 Lambda = np.sqrt(T_desired/temp)
                 v = Lambda*v
 
+            # I/O operations
             # We only write output in certain cases, to save on some time, as this is pretty slow.
             if write_output and progress/total_progress > write_output_threshold:
-                # I/O operations
-                energy_potential, energy_bond, energy_angle, energy_dihedral = potential_energy_jit(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, molecules, nr_atoms,
+                energy_potential, energy_bond, energy_angle, energy_dihedral = potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms,
                          box_size)
                          
                 energy_total = energy_kinetic + energy_potential
@@ -224,20 +223,20 @@ if __name__ == "__main__":
 
     # Water file
     dt = 0.002 # 0.1 ps
-    T = 1 # 10^-13 s
-    r_cut = 7 # A
-    box_size = 50 # A
-    file_xyz = "data/water_500.xyz"
-    file_top = "data/water_500.itp"
-    file_out = "output/test.xyz"
-    file_observable = "output/test.csv"
+    T = 200 # 10^-13 s
+    r_cut = 6 # A
+    box_size = 14 # A
+    file_xyz = "data/mix_test.xyz"
+    file_top = "data/mix_test.itp"
+    file_out = "output/result_mix_test.xyz"
+    file_observable = "output/result_mix_test.csv"
     T_desired = 298.15   #kelvin     if zero we do not use a thermostat
     integrator = "vv"
     write_output = True
     write_output_threshold = 0
     
     #NOTE: DO NOT FORGET TO CHANGE THIS 
-    fill_in_molecules = 3
+    fill_in_molecules = 9
 
     time_1 = time.time()
     #cProfile.run("simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, integrator, write_output, fill_in_molecules, write_output_threshold)")
