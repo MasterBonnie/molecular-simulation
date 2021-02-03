@@ -1,5 +1,5 @@
 import numpy as np
-from numba import vectorize, float64, jit, guvectorize, double, prange, int32
+from numba import jit
 from helper import unit_vector, distance_PBC, dot_product, angle_between_jit, add_jit, sv_mult, r_norm, cross
 
 
@@ -32,34 +32,12 @@ def centre_of_mass(pos, m, molecules):
 
     return centre_of_mass
 
-
-def centre_of_mass_s(pos, m, molecules):
-    """
-    Computes the centre of mass for each molecule, non fixed-length version
-    is slower then the above version
-    Input:
-        pos: array containing the positions
-        m: array containing the mass
-        molecules: list of lists specifying which molecule contains
-                    which atom
-    Output:
-        centre_of_mass: array containg the centres of mass
-    """
-    centre_of_mass = np.zeros((len(molecules), 3))
-    for i, molecule in enumerate(molecules):
-        M = np.sum(m[molecule])
-        Mpos = np.sum(m[molecule, np.newaxis]*pos[molecule], axis = 0)
-        centre_of_mass[i] = Mpos/M
-
-    return centre_of_mass
-
 @jit(nopython=True, cache=True)
 def kinetic_energy(v, m):
-    """
-    Computes the kinetic energy of the system
-    """
+    """ Computes the kinetic energy of the system """
     dot = dot_product(v, v)
     summands = np.multiply(dot, m)
+    # Conversion factor to get the right units
     cf = 1.6605*6.022e-1 
     return cf*0.5*np.sum(summands)
 
@@ -67,39 +45,41 @@ def kinetic_energy(v, m):
 def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms,
                     box_size):
     """
-    Calculates the potential energy of the system
+        Calculates the potential energy of the system
 
-    params:
-        pos: np array of positions
-        bonds:  a nr_bonds x 2 np array, whose rows
-                are the pair which have a bond
-        const_bonds: a nr_bonds x 2 np array, whose
-                rows contain the constants for the
-                associated bond in the same row as bonds
-        angles: a nr_angles x 3 np array, whose rows
-                specify the three atoms in an angle
-        const_angles: a nr_angles x 2 np array, whose
-                rows contain the constants for the 
-                associated angle in the same row as in 
-                angles
-        lj_atoms: a nr_lj x 2 np array, whose rows are the pairs
-                between a lj interaction
-        lj_sigma: a nr_atoms x nr_atoms array, where index i j contains
-                  the sigma const of the lj interaction between these atoms
-        lj_eps: similar to lj_sigma, containing the epsilon variable
-        dihedrals:
-                a nr_dihedrals x 4 np array, containing the indices of atoms in one
-                dihedral angle
-        const_dihedrals: a nr_dihedrals x 4 np array, containing the associated constants
-        nr_atoms: number of atoms in the simulation
-        box_size: size of the simulation box, in A
+        params:
+            pos: np array of positions
+            bonds:  a nr_bonds x 2 np array, whose rows
+                    are the pair which have a bond
+            const_bonds: a nr_bonds x 2 np array, whose
+                    rows contain the constants for the
+                    associated bond in the same row as bonds
+            angles: a nr_angles x 3 np array, whose rows
+                    specify the three atoms in an angle
+            const_angles: a nr_angles x 2 np array, whose
+                    rows contain the constants for the 
+                    associated angle in the same row as in 
+                    angles
+            lj_atoms: a nr_lj x 2 np array, whose rows are the pairs
+                    between a lj interaction
+            lj_sigma: a nr_atoms x nr_atoms array, where index i j contains
+                    the sigma const of the lj interaction between these atoms
+            lj_eps: similar to lj_sigma, containing the epsilon variable
+            dihedrals:
+                    a nr_dihedrals x 4 np array, containing the indices of atoms in one
+                    dihedral angle
+            const_dihedrals: a nr_dihedrals x 4 np array, containing the associated constants
+            nr_atoms: number of atoms in the simulation
+            box_size: size of the simulation box, in A
 
-    Output:
-        energy: total energy of the system, in
-        energy_bond: energy of the bonds in the system
-        energy_angle: energy of the angles in the system
-        energy_dihedral: energy of the dihedrals in the system
-                        if none are present, equals 0
+        Output:
+            energy: total energy of the system, in
+            energy_bond: energy of the bonds in the system
+            energy_angle: energy of the angles in the system
+            energy_dihedral: energy of the dihedrals in the system
+                            if none are present, equals 0
+
+        TODO: Maybe this can be combined in some way with the compute force function, to save some time
     """
     energy = 0
 
@@ -180,47 +160,47 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
 def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms,
                     box_size):
     """
-    Computes the force on each atom, given the position and information from a 
-    topology file.
+        Computes the force on each atom, given the position and information from a 
+        topology file.
 
-    params:
-        pos: np array of positions
-        bonds:  a nr_bonds x 2 np array, whose rows
-                are the pair which have a bond
-        const_bonds: a nr_bonds x 2 np array, whose
-                rows contain the constants for the
-                associated bond in the same row as bonds
-        angles: a nr_angles x 3 np array, whose rows
-                specify the three atoms in an angle
-        const_angles: a nr_angles x 2 np array, whose
-                rows contain the constants for the 
-                associated angle in the same row as in 
-                angles
-        lj_atoms: a nr_lj x 2 np array, whose rows are the pairs
-                between a lj interaction
-        lj_sigma: a nr_atoms x nr_atoms array, where index i j contains
-                  the sigma const of the lj interaction between these atoms
-        lj_eps: similar to lj_sigma, containing the epsilon variable
-        dihedrals:
-                a nr_dihedrals x 4 np array, containing the indices of atoms in one
-                dihedral angle
-        const_dihedrals: a nr_dihedrals x 4 np array, containing the associated constants
-        molecules:
-                if fixed_atom_length is not 0:
-                    a nr_molecules x fixed_atom_length np array containing
-                    the index of atoms in one molecule
-                else:
-                    a python list of numpy arrays containing the index of atoms
-                    in one molecule
-        nr_atoms: number of atoms in the simulation
-        box_size: size of the simulation box, in A
-    Output:
-        force_total: numpy array containing the force acting on each molecule
+        params:
+            pos: np array of positions
+            bonds:  a nr_bonds x 2 np array, whose rows
+                    are the pair which have a bond
+            const_bonds: a nr_bonds x 2 np array, whose
+                    rows contain the constants for the
+                    associated bond in the same row as bonds
+            angles: a nr_angles x 3 np array, whose rows
+                    specify the three atoms in an angle
+            const_angles: a nr_angles x 2 np array, whose
+                    rows contain the constants for the 
+                    associated angle in the same row as in 
+                    angles
+            lj_atoms: a nr_lj x 2 np array, whose rows are the pairs
+                    between a lj interaction
+            lj_sigma: a nr_atoms x nr_atoms array, where index i j contains
+                    the sigma const of the lj interaction between these atoms
+            lj_eps: similar to lj_sigma, containing the epsilon variable
+            dihedrals:
+                    a nr_dihedrals x 4 np array, containing the indices of atoms in one
+                    dihedral angle
+            const_dihedrals: a nr_dihedrals x 4 np array, containing the associated constants
+            molecules:
+                    if fixed_atom_length is not 0:
+                        a nr_molecules x fixed_atom_length np array containing
+                        the index of atoms in one molecule
+                    else:
+                        a python list of numpy arrays containing the index of atoms
+                        in one molecule
+            nr_atoms: number of atoms in the simulation
+            box_size: size of the simulation box, in A
+        Output:
+            force_total: numpy array containing the force acting on each molecule
 
-    NOTE: See also the implementation of read_topology in io_sim, and the definitions of lj_sigma 
-          and lj_eps in simulator.integration
-    NOTE: Some of these variables might be None, which signifies that there are for example no angles
-          in the molecules we are simulating
+        NOTE: See also the implementation of read_topology in io_sim, and the definitions of lj_sigma 
+            and lj_eps in the simulator function in simulator.py
+        NOTE: Some of these variables might be None, which signifies that there are for example no angles
+            in the molecules we are simulating
     """
     force_total = np.zeros((nr_atoms, 3))
 
@@ -288,9 +268,6 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
             force_total += force_1
             force_total += force_2
 
-            # add_jit(force_total, lj_atoms[:,0], force)
-            # add_jit(force_total, lj_atoms[:,1], -force)
-
     #----------------------------------
     # Forces due to dihedral angles
     #----------------------------------
@@ -350,9 +327,7 @@ def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_si
 
 @jit(nopython=True, cache=True, fastmath=True)
 def lj_force(dis, direction, lj_atoms, lj_eps, lj_sigma, nr_atoms):
-    """
-    Computes force due to the lennard-jones interaction
-    """
+    """ Computes force due to the lennard-jones interaction """
     force_1 = np.zeros((nr_atoms, 3))
     force_2 = np.zeros((nr_atoms, 3))
 
@@ -363,6 +338,8 @@ def lj_force(dis, direction, lj_atoms, lj_eps, lj_sigma, nr_atoms):
         if lj_atoms[i,1] == nr_atoms:
             break
 
+        # first dividing and then raising to the power, to (hopefully)
+        # prevent numerical errors.
         term = lj_sigma[lj_atoms[i,0],lj_atoms[i,1]] / dis[i]
         term_1 = 2*np.power(term, 12)
         term_2 = -1*np.power(term, 6)
@@ -377,11 +354,10 @@ def lj_force(dis, direction, lj_atoms, lj_eps, lj_sigma, nr_atoms):
 
 @jit(nopython=True, cache=True, fastmath=True)
 def lj_energy(dis, lj_atoms, lj_eps, lj_sigma, nr_atoms):
-    """
-    Computes the energy due to the lennard-jones interaction
-    """
+    """ Computes the energy due to the lennard-jones interaction """
     energy = 0
     for i in range(lj_atoms.shape[0]):
+        # If this is the case, we are dealing with the "virtual particle"
         if lj_atoms[i,0] == nr_atoms:
             break
         if lj_atoms[i,1] == nr_atoms:
@@ -402,14 +378,27 @@ def temperature(Ekin,N):
     T = Ekin/(N*conversion)
     return T
 
+""" Slower versions of the functions above with the same name, see also helper.py """
+
+def centre_of_mass_s(pos, m, molecules):
+    """
+    Computes the centre of mass for each molecule, non fixed-length version
+    is slower then the above version
+    Input:
+        pos: array containing the positions
+        m: array containing the mass
+        molecules: list of lists specifying which molecule contains
+                    which atom
+    Output:
+        centre_of_mass: array containg the centres of mass
+    """
+    centre_of_mass = np.zeros((len(molecules), 3))
+    for i, molecule in enumerate(molecules):
+        M = np.sum(m[molecule])
+        Mpos = np.sum(m[molecule, np.newaxis]*pos[molecule], axis = 0)
+        centre_of_mass[i] = Mpos/M
+
+    return centre_of_mass
+
 if __name__ == "__main__":
-    pos = np.array([[1.,1.,1.],
-                     [2.5, 1.9, 1.9],
-                     [1.9, 1.9, 1.9]])
-    molecules = [[0], [1,2]]
-    m = np.array([1.,2.,3.])
-    box_size = 2
-    # com = centre_of_mass(pos, m, molecules)
-    # calculate_displacement(com, box_size, np.zeros(com.shape))
-    # project_pos(com, box_size, pos, molecules)
-    
+    pass

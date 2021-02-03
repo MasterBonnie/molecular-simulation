@@ -83,6 +83,8 @@ def setup_matplotlib():
     'ytick.right': False})
 
 
+# If we plot somewhere else, importing this file sets the correct 
+# visual style
 setup_matplotlib()
 
 

@@ -1,9 +1,8 @@
 import numpy as np
 
-import static_state
 import helper
 from helper import water_patern, water_atoms, ethanol_patern, ethanol_atoms
-from numba import vectorize, float64, jit, guvectorize, double
+from numba import  jit
 import plotting
 
 
@@ -14,17 +13,17 @@ import matplotlib.pyplot as plt
 
 def read_xyz(input):
     """
-    Read input xyz file.
-    Input:
-        input: relative path to the xyz file
-    Output:
-        pos: np array of positions
-        atom_names: array of string of the atoms 
-                    in the xyz file
-        nr_atoms: number of atoms
+        Read input xyz file.
+        params:
+            input: relative path to the xyz file
+        Output:
+            pos: np array of positions
+            atom_names: array of string of the atoms 
+                        in the xyz file
+            nr_atoms: number of atoms
 
-    NOTE: if there are multiple timesteps, we return 
-          the last pos, atom_names and nr_atoms
+        NOTE: if there are multiple timesteps, we return 
+            the last pos, atom_names and nr_atoms
     """
 
     with open(input, "r") as inputfile:
@@ -65,10 +64,20 @@ def read_xyz(input):
 def radial_distribution_function(xyz_file, top_file, output_file, dr, box_size, first_molecule, 
                                 second_molecule, second_atom):
     """
-    Calculates the radial distribution function for a given xyz file
-    Needs an associated topology file to work.
+        Calculates the radial distribution function for a given xyz file
+        Needs an associated topology file to work.
 
-    NOTE: Saves the computed rdf
+        params:
+            xyz_file: location of the desired xyz file
+            top_file: location of the associated topology file
+            output_file: where to save the calculated output
+            dr: thickness of the ring for RDF
+            box_size: size of the box of the simulation
+            first_molecule: Which molecule we measure the RDF from
+            second_molecule: Which molecule we measure the RDF to
+            second_atom: which atom in the second molecule to consider 
+        output:
+            writes to output_file and prints a plot
     """
     _, _, _, _, _, _, molecules, _, _ = read_topology(top_file)
 
@@ -191,9 +200,7 @@ def radial_distribution_function(xyz_file, top_file, output_file, dr, box_size, 
 
 @jit(nopython=True, cache=True)
 def calculate_rdf(distances, reference_atoms, pos, box_length, density, rdf):
-    """
-    rdf calculation, give the parameters.
-    """
+    """ rdf calculation, give the parameters. Writes to rdf """
     for i in range(distances.shape[0]):
         lower = distances[i][0]
         upper = distances[i][1]
@@ -215,48 +222,54 @@ def calculate_rdf(distances, reference_atoms, pos, box_length, density, rdf):
 
 def read_topology(input, nr_atoms=0, fixed_atom_length=0):
     """
-    Read a topology file from the file at input.
+        Read a topology file from the file at input.
 
-    params:
-        input: relative path to the itp file
-        nr_atoms: number of atoms in the simulation
-        fixed_atom_length: if not 0, we fill any molecule to have the 
-                        specified length, in order to pre-allocate some
-                        more arrays in the simulation, and be able to use
-                        numpy and numba more. We fill the molecules up with the
-                        value nr_atoms
-    Output:
-        bonds:  a nr_bonds x 2 np array, whose rows
-                are the pair which have a bond
-        const_bonds: a nr_bonds x 2 np array, whose
-                rows contain the constants for the
-                associated bond in the same row as bonds
-        angles: a nr_angles x 3 np array, whose rows
-                specify the three atoms in an angle
-        const_angles: a nr_angles x 2 np array, whose
-                rows contain the constants for the 
-                associated angle in the same row as in 
-                angles
-        lj:     a nr_lj x 2 np array, whose rows are the pairs
-                between a lj interaction
-        const_lj: a nr_lj x 2 np array, whose rows contain the 
-                constant for the associated interaction between
-                molecules in the same row as in lj
-        molecules:
-                if fixed_atom_length is not 0:
-                    a nr_molecules x fixed_atom_length np array containing
-                    the index of atoms in one molecule
-                else:
-                    a python list of numpy arrays containing the index of atoms
-                    in one molecule
-        dihedrals:
-                a nr_dihedrals x 4 np array, containing the indices of atoms in one
-                dihedral angle
-        const_dihedrals:
-                a nr_dihedrals x 4 np array, containing the associated constants
+        params:
+            input: relative path to the itp file
+            nr_atoms: number of atoms in the simulation
+            fixed_atom_length: if not 0, we fill any molecule to have the 
+                            specified length, in order to pre-allocate some
+                            more arrays in the simulation, and be able to use
+                            numpy and numba more. We fill the molecules up with the
+                            value nr_atoms
+        Output:
+            bonds:  a nr_bonds x 2 np array, whose rows
+                    are the pair which have a bond
+            const_bonds: a nr_bonds x 2 np array, whose
+                    rows contain the constants for the
+                    associated bond in the same row as bonds
+            angles: a nr_angles x 3 np array, whose rows
+                    specify the three atoms in an angle
+            const_angles: a nr_angles x 2 np array, whose
+                    rows contain the constants for the 
+                    associated angle in the same row as in 
+                    angles
+            lj:     a nr_lj x 2 np array, whose rows are the pairs
+                    between a lj interaction
+            const_lj: a nr_lj x 2 np array, whose rows contain the 
+                    constant for the associated interaction between
+                    molecules in the same row as in lj
+            molecules:
+                    if fixed_atom_length is not 0:
+                        a nr_molecules x fixed_atom_length np array containing
+                        the index of atoms in one molecule
+                    else:
+                        a python list of numpy arrays containing the index of atoms
+                        in one molecule
+            dihedrals:
+                    a nr_dihedrals x 4 np array, containing the indices of atoms in one
+                    dihedral angle
+            const_dihedrals:
+                    a nr_dihedrals x 4 np array, containing the associated constants
 
-    NOTE: We assume there are always bonds, angles, lj and molecules,
-          dihedrals are optional
+        NOTE: We assume there are always bonds, angles, lj and molecules,
+            dihedrals are optional
+        NOTE:
+            Fixed atom length fills all the molecules in the system to the same length. This allows
+            us to use numpy arrays and numba for a number of other functions later in the simulation.
+            We fill the molecules up with a "virtual particle", with index nr_atoms, which has mass 0.
+            This particle is not considered in any force computations. Unfortunalty this does not seem to
+            work correctly.
     """
 
     with open(input, "r") as inputfile:
@@ -350,17 +363,17 @@ def read_topology(input, nr_atoms=0, fixed_atom_length=0):
 
 def printProgressBar(iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
     """
-    https://stackoverflow.com/questions/3173320/text-progress-bar-in-the-console
-    Call in a loop to create terminal progress bar
-    @params:
-        iteration   - Required  : current iteration (Int)
-        total       - Required  : total iterations (Int)
-        prefix      - Optional  : prefix string (Str)
-        suffix      - Optional  : suffix string (Str)
-        decimals    - Optional  : positive number of decimals in percent complete (Int)
-        length      - Optional  : character length of bar (Int)
-        fill        - Optional  : bar fill character (Str)
-        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
+        https://stackoverflow.com/questions/3173320/text-progress-bar-in-the-console
+        Call in a loop to create terminal progress bar
+        @params:
+            iteration   - Required  : current iteration (Int)
+            total       - Required  : total iterations (Int)
+            prefix      - Optional  : prefix string (Str)
+            suffix      - Optional  : suffix string (Str)
+            decimals    - Optional  : positive number of decimals in percent complete (Int)
+            length      - Optional  : character length of bar (Int)
+            fill        - Optional  : bar fill character (Str)
+            printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
     """
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
     filledLength = int(length * iteration // total)
@@ -372,9 +385,19 @@ def printProgressBar(iteration, total, prefix = '', suffix = '', decimals = 1, l
 
 def create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top):
     """ 
-    Creates a dataset with nr_h20 water molecules and nr_ethanol ethanol molecules
-    Randomly placed inside a box of size box_size.
-    Writes to output_file_xyz and output_file_top
+        Creates a dataset with nr_h20 water molecules and nr_ethanol ethanol molecules
+        Randomly placed inside a box of size box_size. Writes to output_file_xyz and output_file_top
+
+        params:
+            nr_h20: Number of H20 molecules to put in the dataset
+            nr_ethanol: Number of ethanol molecules to put in the dataset
+            tol_h20: minimum distance between each of the atoms in the water molecule
+                     and all other atoms
+            tol_eth: same as tol_h20, but for ethanol molecules
+            box_size: size of the box used for simulation
+            output_file_xyz: file where the dataset is written to
+            output_file_top: file where the topology is written to
+
     """
     with open(output_file_xyz, "w") as xyz_file, open(output_file_top, "w") as top_file:
 
@@ -523,6 +546,7 @@ def create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_x
 
 @jit(nopython=True, cache=True)
 def distance(pos_1, pos_2, box_length):
+    """ Calculates periodic distance between two points """
     x = helper.abs_min(pos_1[0] - pos_2[0], pos_1[0]  - pos_2[0] + box_length, pos_1[0]  - pos_2[0] - box_length)  
 
     y = helper.abs_min(pos_1[1] - pos_2[1], 
@@ -536,9 +560,7 @@ def distance(pos_1, pos_2, box_length):
     return helper.norm(x,y,z)
 
 def check_placement_per_atom(molecule, pos, box, tol):
-    """
-    Checks if molecule can be placed in the box
-    """
+    """ Checks if molecule can be placed in the box """
     for com in pos:
         for atom in molecule:
             if distance(atom, com, box) < tol:
@@ -547,23 +569,19 @@ def check_placement_per_atom(molecule, pos, box, tol):
 
 # Testing of the functions
 if __name__ == "__main__":
-    #pos, atom_names, atoms = read_xyz("data/water_small.xyz")
-    #bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals = read_topology("data/water_small.itp", atoms, 5)  
-
-    nr_h20 = 601
+    nr_h20 = 0
     tol_h20 = 1.82
-    nr_ethanol = 100
+    nr_ethanol = 1000
     tol_eth = 1.82
-    box_size = 30
-    output_file_xyz = "data/mix_3nm_2.xyz"
-    output_file_top = "data/mix_3nm_2.itp"
+    box_size = 50
+    output_file_xyz = "data/ethanol_1000.xyz"
+    output_file_top = "data/ethanol_1000.itp"
 
-    #create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
+    create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
 
     xyz_file = "output/mix_3nm_slow.xyz"
     top_file = "data/mix_3nm_2.itp"
     output_file = "output/rdf/rdf_mix_water_water_h.csv"
-
 
     first_molecule = "ethanol"
     second_molecule = "ethanol"
@@ -572,7 +590,7 @@ if __name__ == "__main__":
     box_size = 30
     dr = 0.05
 
-    radial_distribution_function(xyz_file, top_file, output_file, dr, box_size, 
-                            first_molecule, second_molecule, second_atom)
+    # radial_distribution_function(xyz_file, top_file, output_file, dr, box_size, 
+    #                        first_molecule, second_molecule, second_atom)
     
     

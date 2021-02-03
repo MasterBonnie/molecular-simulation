@@ -1,5 +1,5 @@
 import numpy as np
-from numba import vectorize, float64, jit, guvectorize, int16, prange, int8, int32
+from numba import jit, int32
 import math
 
 """ helper/misc. functions and constants """
@@ -72,6 +72,9 @@ def unit_vector(matrix):
 
     this behaviour is used in the LJ force computation, 
     these entries are ignored anyway, but we dont want an error
+    
+    NOTE: This should probably become a seperate function to prevent 
+    unwanted behaviour, or fix this in the LJ force computation.
     """
     res = np.zeros(matrix.shape)
     
@@ -136,29 +139,24 @@ def _clip_jit(arg, res):
             res[i] = arg[i]
 
 def random_unit_vector(const = 1):
-    """
-    returns random unit vector scaled with const
-    """
-
+    """ returns random unit vector scaled with const """
     u = np.random.uniform(size=3)
     u /= np.linalg.norm(u) # normalize
     vRand = const*u
-
     return vRand
     
 def atom_string(atom, pos):
-    """
-    returns string format correct for xyz file
-    """
+    """ returns string format correct for xyz file """
     return f"{atom} {pos[0]} {pos[1]} {pos[2]} \n"
 
 def atom_name_to_mass(atoms):
-    """ converts an atom name to its mass"""
+    """ converts an atom name to its mass """
     mass = [atom_mass[atom] for atom in atoms]
     return np.array(mass + [0])
 
 @jit(nopython=True, cache=True, debug = True)
 def cartesianprod(x,y):
+    """ returns the cartesian product between arrays x and y """
     res = np.zeros((x.shape[0]*y.shape[0],2), dtype=np.int16)
 
     for i in range(x.shape[0]):
@@ -170,18 +168,17 @@ def cartesianprod(x,y):
 def neighbor_list(molecule_to_atoms, centre_of_mass, r_cut, box_size, nr_atoms, atom_length):
     """
     Returns which atoms are close, based on centres of mass that are withtin 
-    r_cut distance of eachother 
+    r_cut distance of eachother.
     """
 
     dis_matrix = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]), np.int8)
     difference_matrix = matrix_difference(centre_of_mass)
     distance_PBC_matrix(difference_matrix, box_size, r_cut, dis_matrix)
-    indices = check_index(dis_matrix, molecule_to_atoms, nr_atoms, atom_length)
+    indices = check_index(dis_matrix, molecule_to_atoms, atom_length)
 
 
     # Find neighbor list by partitioning the box in smaller boxes, as to not compute every distance between
     # pairs. However seems to be slower? neighbor_list_creation seems to take up most time.
-
 
     # nr_of_par = 7
     # max_number_atoms = 30
@@ -189,31 +186,14 @@ def neighbor_list(molecule_to_atoms, centre_of_mass, r_cut, box_size, nr_atoms, 
     # print("New calculations")
     # partition = partition_pos(centre_of_mass, box_size, nr_of_par, max_number_atoms)
     # indices_molecules = neighbor_list_creation(partition, centre_of_mass, nr_of_par, nr_atoms, box_size, r_cut)
-    # indices = index_molecule_2_atom(indices_molecules, molecule_to_atoms, nr_atoms, atom_length)
+    # indices = index_molecule_2_atom(indices_molecules, molecule_to_atoms, atom_length)
 
     return indices
 
-def neighbor_list_s(molecule_to_atoms, centre_of_mass, r_cut, box_size, nr_atoms, atom_length):
-    """
-    Returns which atoms are close, based on centres of mass that are withtin 
-    r_cut distance of eachother 
-    """
-
-    dis_matrix = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]), np.int8)
-    difference_matrix = matrix_difference(centre_of_mass)
-    distance_PBC_matrix(difference_matrix, box_size, r_cut, dis_matrix)
-
-    nl =  np.transpose(np.nonzero(dis_matrix))
-
-    if nl.size != 0:
-        indices = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
-    else:
-        indices = np.array([])
-
-    return indices
 
 @jit(nopython=True, cache=True)
 def matrix_difference(arg):
+    """ computes (n,n,3) matrix where  res[i][j] = arg[i] - arg[j] """
     res = np.zeros((arg.shape[0], arg.shape[0],3))
 
     for i in range(arg.shape[0]):
@@ -224,7 +204,13 @@ def matrix_difference(arg):
     return res
 
 @jit(nopython=True, cache=True)
-def check_index(dis_matrix, molecule_to_atoms, nr_atoms, atom_length):
+def check_index(dis_matrix, molecule_to_atoms, atom_length):
+    """
+        Converts the computed distance matrix to a list of pairs of 
+        indices of atoms, which are close enough for a LJ force to be 
+        computed.
+    """
+
     i_1, i_2 = np.nonzero(dis_matrix)
     n = len(i_1)
 
@@ -239,7 +225,12 @@ def check_index(dis_matrix, molecule_to_atoms, nr_atoms, atom_length):
     return indices
 
 @jit(nopython=True, cache=True)
-def index_molecule_2_atom(indices, molecule_to_atoms, nr_atoms, atom_length):
+def index_molecule_2_atom(indices, molecule_to_atoms, atom_length):
+    """
+        Converts the computed distance matrix to a list of pairs of 
+        indices of atoms, which are close enough for a LJ force to be 
+        computed.
+    """
     n = indices[0,0]
     indices_atoms = np.zeros((n*atom_length*atom_length,2), dtype=np.int16)
 
@@ -253,6 +244,7 @@ def index_molecule_2_atom(indices, molecule_to_atoms, nr_atoms, atom_length):
 
 @jit(nopython=True, cache=True)
 def partition_pos(pos, box_size, nr_of_par, max_number_atoms):
+    """ Partitions the box in nr_of_par smaller boxes along each axis """
     partition_size = box_size/nr_of_par
     partition = np.zeros((nr_of_par, nr_of_par, nr_of_par, max_number_atoms), dtype=np.int16)
 
@@ -271,7 +263,7 @@ def partition_pos(pos, box_size, nr_of_par, max_number_atoms):
 @jit(nopython=True, cache=True)
 def neighbor_list_creation(partition, pos, nr_of_par, nr_atoms, box_length, r_cut):
     """
-    Creates neighbor list using the cell list computed in previous function
+        Creates neighbor list using the cell list computed in previous function
     """
 
     # Array in which the first element stores the current length of the 
@@ -309,10 +301,9 @@ def neighbor_list_creation(partition, pos, nr_of_par, nr_atoms, box_length, r_cu
 @jit(nopython=True, cache=True)
 def create_list(molecules, fixed_atom_length):
     """
-    Creates list of what atoms are connected given molecules that are
-    connected, i.e. matrix[i][j] is the cartesian product of the atoms 
-    in molecule i and molecule j
-
+        Creates list of what atoms are connected given molecules that are
+        connected, i.e. matrix[i][j] is the cartesian product of the atoms 
+        in molecule i and molecule j
     """
     n = molecules.shape[0]
     matrix = np.zeros((n, n, fixed_atom_length**2, 2), dtype=np.int16)
@@ -324,25 +315,6 @@ def create_list(molecules, fixed_atom_length):
 
     return matrix
 
-
-def create_list_s(molecules, _):
-    """
-    Creates list of what atoms are connected given molecules that are
-    connected, i.e. matrix[i][j] is the cartesian product of the atoms 
-    in molecule i and molecule j
-    # NOTE: inefficient double loop, but we only call this once so it is
-            not that bad
-    """
-    matrix = [[0 for j in range(len(molecules))] for i in range(len(molecules))]
-
-    for i in range(len(molecules)):
-        print(f"working on creating list...  {(100*i)//(len(molecules))} %        ", end="\r")
-        for j in range(len(molecules)):
-            if i > j:
-                matrix[i][j] = cartesianprod(molecules[i], molecules[j])
-
-    return matrix
-
 @jit(nopython=True, cache=True, fastmath=True)
 def norm(x,y,z):
     """ 2-norm of a vector"""
@@ -351,7 +323,7 @@ def norm(x,y,z):
 @jit(nopython=True, cache=True)
 def abs_min(x1,x2,x3):
     """
-    returns minimum of the absolute value of a (x,y,z) triplet
+        eturns minimum of the absolute value of a (x,y,z) triplet
     """
     res = x1
     if abs(res) > abs(x2):
@@ -364,15 +336,15 @@ def abs_min(x1,x2,x3):
 @jit(nopython=True, cache=True)
 def distance_PBC(pos_1, pos_2, box_length, res, diff):
     """
-    Function to compute the distance between two positions when considering
-    periodic boundary conditions
+        Function to compute the distance between two positions when considering
+        periodic boundary conditions
 
-    Input:
-        pos_1: array of positions
-        pos_2: array of positions, same length as pos_1
-        box_length: length of the PBC box, in A
-        res: array which will be filled with the distances
-        diff: array which will be filled with the difference vectors
+        Input:
+            pos_1: array of positions
+            pos_2: array of positions, same length as pos_1
+            box_length: length of the PBC box, in A
+            res: array which will be filled with the distances
+            diff: array which will be filled with the difference vectors
 
     """
 
@@ -393,14 +365,14 @@ def distance_PBC(pos_1, pos_2, box_length, res, diff):
 @jit(nopython=True, cache=True)
 def distance_PBC_matrix(diff, box_length, r_cut, res):
     """
-    Function to compute the distance of a matrix of vectors when considering
-    periodic boundary conditions
+        Function to compute the distance of a matrix of vectors when considering
+        periodic boundary conditions
 
-    Input:
-        diff: (n,n,3) numpy array of vectors
-        box_length: length of the PBC box, in A
-        r_cut: cutoff distance, in A
-        res: (n,n) array which will be filled with the distances
+        Input:
+            diff: (n,n,3) numpy array of vectors
+            box_length: length of the PBC box, in A
+            r_cut: cutoff distance, in A
+            res: (n,n) array which will be filled with the distances
 
     """
 
@@ -425,6 +397,7 @@ def distance_PBC_matrix(diff, box_length, r_cut, res):
 
 @jit(nopython=True, cache=True)
 def check_distance(pos_1, pos_2, box_length, r_cut):
+    """ Checks if the distance between two positions is less than r_cut """
     diff = pos_1 - pos_2
 
     x = abs_min(diff[0], 
@@ -447,12 +420,17 @@ def check_distance(pos_1, pos_2, box_length, r_cut):
 
 @jit(nopython=True, cache=True)
 def add_jit(total, index, addition):
+    """ 
+        replaces the numpy.add.at function, which seems to be very slow.
+        see https://github.com/numpy/numpy/issues/5922
+    """
     for i in range(index.shape[0]):
         for j in range(3):
             total[index[i]][j] += addition[i][j]
 
 @jit(nopython=True, cache=True)
 def calculate_displacement(centres_of_mass, box_size, res):
+    """ Calculates the displacement needed for each molecule """
     for i in range(centres_of_mass.shape[0]):
         for j in range(3):
             if centres_of_mass[i][j] < 0:
@@ -462,6 +440,11 @@ def calculate_displacement(centres_of_mass, box_size, res):
 
 @jit(nopython=True, cache=True)
 def project_pos(centres_of_mass, box_size, pos, molecules):
+    """
+        Projects all molecules back into the simulation box,
+        by looking at whether the center of mass is outside the box
+        and translating all of the atoms inside the molecule
+    """
     
     displacement = np.zeros(centres_of_mass.shape)
     calculate_displacement(centres_of_mass, box_size, displacement)
@@ -471,6 +454,48 @@ def project_pos(centres_of_mass, box_size, pos, molecules):
 
     pos[-1] = np.array([0,0,0])
 
+
+""" These are the slower versions of the functions above with the same name. These are still here because
+    the fill in for molecules does not seem to behave correctly if the mixture case, and with these functions
+    the simulation does run correctly """
+
+def neighbor_list_s(molecule_to_atoms, centre_of_mass, r_cut, box_size, nr_atoms, atom_length):
+    """
+        Returns which atoms are close, based on centres of mass that are withtin 
+        r_cut distance of eachother 
+    """
+
+    dis_matrix = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]), np.int8)
+    difference_matrix = matrix_difference(centre_of_mass)
+    distance_PBC_matrix(difference_matrix, box_size, r_cut, dis_matrix)
+
+    nl =  np.transpose(np.nonzero(dis_matrix))
+
+    if nl.size != 0:
+        indices = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
+    else:
+        indices = np.array([])
+
+    return indices
+
+
+def create_list_s(molecules, _):
+    """
+    Creates list of what atoms are connected given molecules that are
+    connected, i.e. matrix[i][j] is the cartesian product of the atoms 
+    in molecule i and molecule j
+    # NOTE: inefficient double loop, but we only call this once so it is
+            not that bad
+    """
+    matrix = [[0 for j in range(len(molecules))] for i in range(len(molecules))]
+
+    for i in range(len(molecules)):
+        print(f"working on creating list...  {(100*i)//(len(molecules))} %        ", end="\r")
+        for j in range(len(molecules)):
+            if i > j:
+                matrix[i][j] = cartesianprod(molecules[i], molecules[j])
+
+    return matrix
 
 def project_pos_s(centres_of_mass, box_size, pos, molecules):
     
@@ -481,6 +506,7 @@ def project_pos_s(centres_of_mass, box_size, pos, molecules):
         pos[molecule] += displacement[i]
 
     pos[-1] = np.array([0,0,0])
+
 
 if __name__ == "__main__":
     
