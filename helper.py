@@ -1,7 +1,6 @@
 import numpy as np
 from numba import vectorize, float64, jit, guvectorize, int16, prange, int8, int32
 import math
-import perfplot
 
 """ helper/misc. functions and constants """
 
@@ -78,26 +77,20 @@ def unit_vector(matrix):
     
     for i in range(matrix.shape[0]):
         div = norm(matrix[i,0], matrix[i,1], matrix[i,2])
-        if div > 1e-3:
+        if div > 1e-6:
             for j in range(3):
                 res[i,j] = matrix[i,j]/div
 
     return res
 
-@jit(nopython=True, cache=True) 
+@jit(nopython=True, cache=True)
 def angle_between_jit(arg_1, arg_2):
-    """ 
-    Returns the angle in radians between vectors 'v1' and 'v2', rowwise
-    """
-    # Calculates the row-wise dot product between
-    # diff_1 and diff_2
-    v1 = unit_vector(arg_1)
-    v2 = unit_vector(arg_2)
 
-    # We then get the angle from this
-    dot = dot_product(v1,v2)
-    dot_clipped = clip_jit(dot)
-    ang = np.arccos(dot_clipped)
+    opposite = r_norm(cross(arg_1, arg_2))
+    adjacent = dot_product(arg_1, arg_2)
+
+    ang = np.arctan2(opposite, adjacent)
+
     return ang
 
 @jit(nopython=True, cache=True)
@@ -164,27 +157,31 @@ def atom_name_to_mass(atoms):
     mass = [atom_mass[atom] for atom in atoms]
     return np.array(mass + [0])
 
-@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True, debug = True)
 def cartesianprod(x,y):
-    res = np.zeros((x.shape[0]*y.shape[0],2), dtype=int16)
+    res = np.zeros((x.shape[0]*y.shape[0],2), dtype=np.int16)
 
     for i in range(x.shape[0]):
         for j in range(y.shape[0]):
-            res[i*x.shape[0] + j] = np.array([x[i],y[j]], dtype=int16)
+            res[i*y.shape[0] + j] = np.array([x[i],y[j]], dtype=np.int16)
     return res
 
-#@jit(nopython=True, cache=True)
+@jit(nopython=True, cache=True)
 def neighbor_list(molecule_to_atoms, centre_of_mass, r_cut, box_size, nr_atoms, atom_length):
     """
     Returns which atoms are close, based on centres of mass that are withtin 
     r_cut distance of eachother 
     """
 
-    # print("Old calculations")
     dis_matrix = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]), np.int8)
     difference_matrix = matrix_difference(centre_of_mass)
     distance_PBC_matrix(difference_matrix, box_size, r_cut, dis_matrix)
     indices = check_index(dis_matrix, molecule_to_atoms, nr_atoms, atom_length)
+
+
+    # Find neighbor list by partitioning the box in smaller boxes, as to not compute every distance between
+    # pairs. However seems to be slower? neighbor_list_creation seems to take up most time.
+
 
     # nr_of_par = 7
     # max_number_atoms = 30
@@ -193,6 +190,25 @@ def neighbor_list(molecule_to_atoms, centre_of_mass, r_cut, box_size, nr_atoms, 
     # partition = partition_pos(centre_of_mass, box_size, nr_of_par, max_number_atoms)
     # indices_molecules = neighbor_list_creation(partition, centre_of_mass, nr_of_par, nr_atoms, box_size, r_cut)
     # indices = index_molecule_2_atom(indices_molecules, molecule_to_atoms, nr_atoms, atom_length)
+
+    return indices
+
+def neighbor_list_s(molecule_to_atoms, centre_of_mass, r_cut, box_size, nr_atoms, atom_length):
+    """
+    Returns which atoms are close, based on centres of mass that are withtin 
+    r_cut distance of eachother 
+    """
+
+    dis_matrix = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]), np.int8)
+    difference_matrix = matrix_difference(centre_of_mass)
+    distance_PBC_matrix(difference_matrix, box_size, r_cut, dis_matrix)
+
+    nl =  np.transpose(np.nonzero(dis_matrix))
+
+    if nl.size != 0:
+        indices = np.concatenate([molecule_to_atoms[i[0]][i[1]] for i in nl])
+    else:
+        indices = np.array([])
 
     return indices
 
@@ -305,6 +321,25 @@ def create_list(molecules, fixed_atom_length):
         for j in range(n):
             if i > j:
                 matrix[i][j] = cartesianprod(molecules[i],molecules[j])
+
+    return matrix
+
+
+def create_list_s(molecules, _):
+    """
+    Creates list of what atoms are connected given molecules that are
+    connected, i.e. matrix[i][j] is the cartesian product of the atoms 
+    in molecule i and molecule j
+    # NOTE: inefficient double loop, but we only call this once so it is
+            not that bad
+    """
+    matrix = [[0 for j in range(len(molecules))] for i in range(len(molecules))]
+
+    for i in range(len(molecules)):
+        print(f"working on creating list...  {(100*i)//(len(molecules))} %        ", end="\r")
+        for j in range(len(molecules)):
+            if i > j:
+                matrix[i][j] = cartesianprod(molecules[i], molecules[j])
 
     return matrix
 
@@ -427,6 +462,17 @@ def calculate_displacement(centres_of_mass, box_size, res):
 
 @jit(nopython=True, cache=True)
 def project_pos(centres_of_mass, box_size, pos, molecules):
+    
+    displacement = np.zeros(centres_of_mass.shape)
+    calculate_displacement(centres_of_mass, box_size, displacement)
+
+    for i, molecule in enumerate(molecules):
+        pos[molecule] += displacement[i]
+
+    pos[-1] = np.array([0,0,0])
+
+
+def project_pos_s(centres_of_mass, box_size, pos, molecules):
     
     displacement = np.zeros(centres_of_mass.shape)
     calculate_displacement(centres_of_mass, box_size, displacement)

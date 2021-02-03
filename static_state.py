@@ -32,6 +32,27 @@ def centre_of_mass(pos, m, molecules):
 
     return centre_of_mass
 
+
+def centre_of_mass_s(pos, m, molecules):
+    """
+    Computes the centre of mass for each molecule, non fixed-length version
+    is slower then the above version
+    Input:
+        pos: array containing the positions
+        m: array containing the mass
+        molecules: list of lists specifying which molecule contains
+                    which atom
+    Output:
+        centre_of_mass: array containg the centres of mass
+    """
+    centre_of_mass = np.zeros((len(molecules), 3))
+    for i, molecule in enumerate(molecules):
+        M = np.sum(m[molecule])
+        Mpos = np.sum(m[molecule, np.newaxis]*pos[molecule], axis = 0)
+        centre_of_mass[i] = Mpos/M
+
+    return centre_of_mass
+
 @jit(nopython=True, cache=True)
 def kinetic_energy(v, m):
     """
@@ -85,6 +106,7 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
     energy_bond = np.zeros((1))
     energy_angle = np.zeros((1))
     energy_dihedral = np.zeros((1))
+    energy_lj = 0
 
     # Energy due to bonds 
     #----------------------------------
@@ -119,7 +141,8 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
             diff = np.zeros((lj_atoms.shape[0], 3))
             dis = np.zeros(diff.shape[0])
             distance_PBC(pos[lj_atoms[:,0]], pos[lj_atoms[:,1]],  box_size, dis, diff)
-            energy += lj_energy(dis, lj_atoms, lj_eps, lj_sigma, nr_atoms)
+            energy_lj = lj_energy(dis, lj_atoms, lj_eps, lj_sigma, nr_atoms)
+            energy += energy_lj
 
     if dihedrals is not None:
         i = pos[dihedrals[:,0]]
@@ -151,7 +174,7 @@ def potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj
         energy_dihedral = 0.5*(C_1*(1.0 + np.cos(psi)) + C_2*(1.0 - np.cos(2*psi)) + C_3*(1.0 + np.cos(3*psi)) + C_4*(1.0 - np.cos(4*psi)))
         energy += np.sum(energy_dihedral)
 
-    return energy, np.sum(energy_bond), np.sum(energy_angle), np.sum(energy_dihedral)
+    return energy, np.sum(energy_bond), np.sum(energy_angle), np.sum(energy_dihedral), energy_lj
  
 @jit(nopython=True, cache=True)
 def compute_force(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms,

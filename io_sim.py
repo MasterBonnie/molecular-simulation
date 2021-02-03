@@ -4,7 +4,7 @@ import static_state
 import helper
 from helper import water_patern, water_atoms, ethanol_patern, ethanol_atoms
 from numba import vectorize, float64, jit, guvectorize, double
-from plotting import setup_matplotlib
+import plotting
 
 
 import matplotlib.pyplot as plt
@@ -62,7 +62,8 @@ def read_xyz(input):
 
     return pos, atom_names, atoms
 
-def radial_distribution_function(xyz_file, top_file, dr, box_size):
+def radial_distribution_function(xyz_file, top_file, output_file, dr, box_size, first_molecule, 
+                                second_molecule, second_atom):
     """
     Calculates the radial distribution function for a given xyz file
     Needs an associated topology file to work.
@@ -70,12 +71,6 @@ def radial_distribution_function(xyz_file, top_file, dr, box_size):
     NOTE: Saves the computed rdf
     """
     _, _, _, _, _, _, molecules, _, _ = read_topology(top_file)
-
-    # Select which molecules and atoms we want to find the rdf of
-    first_molecule = "water"
-    #first_atom = "O"  first molecule is always O
-    second_molecule = "water"
-    second_atom = "O"
 
     # Number of reference atoms, i.e. atoms to average over
     nr_reference_atoms = 1000
@@ -189,7 +184,7 @@ def radial_distribution_function(xyz_file, top_file, dr, box_size):
         total_rdf = total_rdf/(len(sample_points))
         
         # Save rdf calculation in csv file
-        np.savetxt("output/rdf/rdf_water_5nm_O_O.csv", total_rdf, delimiter=",")
+        np.savetxt(output_file, total_rdf, delimiter=",")
 
         plt.plot([distance[0] for distance in distances], total_rdf)
         plt.show()
@@ -342,13 +337,13 @@ def read_topology(input, nr_atoms=0, fixed_atom_length=0):
                     line = inputfile.readline()
                     line = line.split()
 
-                    if nr_atoms != 0:
+                    if fixed_atom_length != 0:
                         length = fixed_atom_length - len(line)
                         molecules.append(np.array(line + [nr_atoms for i in range(length)], dtype=np.int16))
                     else:
                         molecules.append(np.array(line, dtype=np.int16))
 
-                if nr_atoms != 0:
+                if fixed_atom_length != 0:
                     molecules = np.asarray(molecules, dtype=np.int16)
 
     return bonds, const_bonds, angles, const_angles, lj, const_lj, molecules, dihedrals, const_dihedrals
@@ -565,5 +560,19 @@ if __name__ == "__main__":
 
     #create_dataset(nr_h20, nr_ethanol, tol_h20, tol_eth, box_size, output_file_xyz, output_file_top)
 
-    radial_distribution_function("output/result_water_5nm.xyz", "data/water.itp", 0.05, box_size = 50)
+    xyz_file = "output/mix_3nm_slow.xyz"
+    top_file = "data/mix_3nm_2.itp"
+    output_file = "output/rdf/rdf_mix_water_water_h.csv"
+
+
+    first_molecule = "ethanol"
+    second_molecule = "ethanol"
+    second_atom = "H"
+
+    box_size = 30
+    dr = 0.05
+
+    radial_distribution_function(xyz_file, top_file, output_file, dr, box_size, 
+                            first_molecule, second_molecule, second_atom)
+    
     

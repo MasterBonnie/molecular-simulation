@@ -5,9 +5,9 @@ import cProfile
 import time
 
 from io_sim import read_topology, read_xyz, printProgressBar
-from helper import atom_string, unit_vector,  atom_name_to_mass, create_list, neighbor_list, project_pos
+from helper import atom_string, unit_vector,  atom_name_to_mass, create_list, create_list_s, neighbor_list, neighbor_list_s, project_pos, project_pos_s
 import integrators
-from static_state import centre_of_mass, compute_force, kinetic_energy, potential_energy, temperature
+from static_state import centre_of_mass, centre_of_mass_s, compute_force, kinetic_energy, potential_energy, temperature
 
 def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, 
                 integrator="vv", write_output = True, fill_in_molecules = 3, write_output_threshold = 0):
@@ -35,11 +35,40 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
     Output:
         Writes an xyz file to the file located at file_out
     """
-
+    debug = True
     print_simulation_info(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, 
                 integrator, write_output, fill_in_molecules, write_output_threshold)
     
-    print("Initialization of simulation")
+    print("Initialization of simulation and parameters")
+
+    # If this is equal to zero, we use the "slower" version of several functions
+    # There seems to be a bug if we use this on datasets consisting of different molecules
+    if fill_in_molecules == 0:
+        c_o_m = centre_of_mass_s
+        nl = neighbor_list_s
+        pp = project_pos_s
+        cl = create_list_s
+
+    else:
+        c_o_m = centre_of_mass
+        nl = neighbor_list
+        pp = project_pos
+        cl = create_list
+
+    def compute_force_and_project(pos, m, cf, molecules, molecule_to_atoms, nr_atoms, bonds, const_bonds, angles,
+                        const_angles, lj_sigma, lj_eps, dihedrals, const_dihedrals):
+        centres_of_mass = c_o_m(pos, m, molecules)
+        pp(centres_of_mass, box_size, pos, molecules)
+
+        lj_atoms = None
+        if molecule_to_atoms is not None:
+            lj_atoms = nl(molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms, fill_in_molecules)
+
+        f = cf*compute_force(pos, bonds, const_bonds, angles,
+                        const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms, box_size)
+
+        return f, lj_atoms
+
 
     t = 0
 
@@ -78,7 +107,8 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
 
         # Create the conversion from molecules to atoms
         # This is for the Lennard-Jones potential
-        molecule_to_atoms = create_list(molecules, fill_in_molecules)
+        #molecule_to_atoms = create_list(molecules, fill_in_molecules)
+        molecule_to_atoms = cl(molecules, fill_in_molecules)
 
     # Random initial velocity
     v = unit_vector(np.random.uniform(size=[nr_atoms,3]))
@@ -108,8 +138,11 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
             f, _ = compute_force_and_project(pos, m, cf, molecules, molecule_to_atoms, nr_atoms, bonds, const_bonds, angles,
                 const_angles, lj_sigma, lj_eps, dihedrals, const_dihedrals)
 
+        if debug:
+            # We start a timer to measure the total time it takes to run the simulation
+            time_1 = time.time()
         while t < T:
-            if progress % 1000 == 0:
+            if progress % 10 == 0:
                 printProgressBar(progress, total_progress)
 
             # Select which integrator we use. In general, these follow the same pattern, update the positions and velocity,
@@ -164,12 +197,12 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
             # I/O operations
             # We only write output in certain cases, to save on some time, as this is pretty slow.
             if write_output and progress/total_progress > write_output_threshold:
-                energy_potential, energy_bond, energy_angle, energy_dihedral = potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms,
+                energy_potential, energy_bond, energy_angle, energy_dihedral, energy_lj = potential_energy(pos, bonds, const_bonds, angles, const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms,
                          box_size)
                          
                 energy_total = energy_kinetic + energy_potential
 
-                obs_file.write(f"{energy_potential}, {energy_kinetic}, {energy_total}, {energy_bond}, {energy_angle}, {energy_dihedral}, {temp} \n")
+                obs_file.write(f"{energy_potential}, {energy_kinetic}, {energy_total}, {energy_bond}, {energy_angle}, {energy_dihedral}, {energy_lj}, {temp} \n")
 
                 output_file.write(f"{nr_atoms}" + '\n')
                 output_file.write("Comments" + '\n')
@@ -180,23 +213,17 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
                     position_string += atom_string(atoms[atom_name], atom)
                     
                 output_file.write(position_string)
-
+    
     print()
+    
+    if debug:
+        time_2 = time.time()
+    
+        print(f"Total time for all iterations: {time_2 - time_1}")
+        print(f"Time per iteration, on average, in seconds: {(time_2 - time_1) / total_progress }")
+    
     return
 
-def compute_force_and_project(pos, m, cf, molecules, molecule_to_atoms, nr_atoms, bonds, const_bonds, angles,
-                    const_angles, lj_sigma, lj_eps, dihedrals, const_dihedrals):
-    centres_of_mass = centre_of_mass(pos, m, molecules)
-    project_pos(centres_of_mass, box_size, pos, molecules)
-
-    lj_atoms = None
-    if molecule_to_atoms is not None:
-        lj_atoms = neighbor_list(molecule_to_atoms, centres_of_mass, r_cut, box_size, nr_atoms, fill_in_molecules)
-
-    f = cf*compute_force(pos, bonds, const_bonds, angles,
-                    const_angles, lj_atoms, lj_sigma, lj_eps, dihedrals, const_dihedrals, nr_atoms, box_size)
-
-    return f, lj_atoms
 
 def print_simulation_info(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, 
                 integrator, write_output, fill_in_molecules, write_output_threshold):
@@ -214,29 +241,41 @@ def print_simulation_info(dt, T, r_cut, box_size, file_xyz, file_top, file_out, 
                         Ouput file: {file_out} \n \
                         Output file energy: {file_observable} \n \
                         \n \
-                        Integrator: {integrator}\n"
+                        Integrator: {integrator}\n \
+                        \n \
+                        Writing output: {write_output}, from {write_output_threshold*100} %\n"
     print(info_string)
     print()
+
+
+
+###############
+#CENTRE OF MASS AND INDEX FINDING FOR LJ ARE CHANGED TO SLOW VERSION
+###############
+# ALSO CREATE LIST, PROJECT_POS
+###############
+
+
 
 # Testing of the functions
 if __name__ == "__main__":
 
     # Water file
-    dt = 0.002 # 0.1 ps
-    T = 200 # 10^-13 s
-    r_cut = 6 # A
-    box_size = 14 # A
-    file_xyz = "data/mix_test.xyz"
-    file_top = "data/mix_test.itp"
-    file_out = "output/result_mix_test.xyz"
-    file_observable = "output/result_mix_test.csv"
-    T_desired = 298.15   #kelvin     if zero we do not use a thermostat
+    dt = 0.005 # 10^-13 s
+    T = 10 # 10^-13 s
+    r_cut = 7 # A
+    box_size = 50 # A
+    file_xyz = "data/mix_3nm_2.xyz"
+    file_top = "data/mix_3nm_2.itp"
+    file_out = "output/test_r.xyz"
+    file_observable = "output/test_r.csv"
+    T_desired = 0 #298.15   #kelvin     if zero we do not use a thermostat
     integrator = "vv"
     write_output = True
     write_output_threshold = 0
     
     #NOTE: DO NOT FORGET TO CHANGE THIS 
-    fill_in_molecules = 9
+    fill_in_molecules = 3
 
     time_1 = time.time()
     #cProfile.run("simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, integrator, write_output, fill_in_molecules, write_output_threshold)")
