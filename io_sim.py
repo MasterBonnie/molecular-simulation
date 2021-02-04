@@ -3,8 +3,6 @@ import numpy as np
 import helper
 from helper import water_patern, water_atoms, ethanol_patern, ethanol_atoms
 from numba import  jit
-import plotting
-
 
 import matplotlib.pyplot as plt
 
@@ -150,7 +148,7 @@ def radial_distribution_function(xyz_file, top_file, output_file, dr, box_size, 
     iteration = 0
     rdf_iteration = 0
     max_iterations = 10
-    offset = 50000
+    offset = 25000
     sample_points = [offset + 100*i for i in range(max_iterations)]
 
     with open(xyz_file, "r") as input_file:    
@@ -193,10 +191,12 @@ def radial_distribution_function(xyz_file, top_file, output_file, dr, box_size, 
         total_rdf = total_rdf/(len(sample_points))
         
         # Save rdf calculation in csv file
-        np.savetxt(output_file, total_rdf, delimiter=",")
+        #np.savetxt(output_file, total_rdf, delimiter=",")
 
-        plt.plot([distance[0] for distance in distances], total_rdf)
-        plt.show()
+        #plt.plot([distance[0] for distance in distances], total_rdf)
+        #plt.show()
+
+        return ([distance[0] for distance in distances], total_rdf)
 
 @jit(nopython=True, cache=True)
 def calculate_rdf(distances, reference_atoms, pos, box_length, density, rdf):
@@ -590,7 +590,11 @@ if __name__ == "__main__":
     box_size = 30
     dr = 0.05
 
-    # radial_distribution_function(xyz_file, top_file, output_file, dr, box_size, 
+    # x,y = radial_distribution_function(xyz_file, top_file, output_file, dr, box_size, 
     #                        first_molecule, second_molecule, second_atom)
+    # plt.plot(x,y)
+    # plt.show()
+
+
     
     

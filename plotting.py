@@ -2,8 +2,12 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
 import seaborn as sns
+from io_sim import radial_distribution_function
 
 """ File for plotting stuff """
+
+legend_size = 18
+axes_label_size = 17
 
 def plot_csv_phase(file):
     data = np.genfromtxt(file, delimiter=',')
@@ -15,32 +19,53 @@ def plot_debugging(file):
     data = np.genfromtxt(file, delimiter = ",")
     time_step = np.linspace(1.5, 2, num=data.shape[0])
 
-    plt.plot(time_step, data[:, 0])
-    plt.plot(time_step, data[:, 1])
-    plt.plot(time_step, data[:, 2])
-    plt.legend(["potential", "kinetic", "total"], loc = "center right")
+    fig, ax = plt.subplots(figsize = (11, 9))
+
+    ax.plot(time_step, data[:, 0])
+    ax.plot(time_step, data[:, 1])
+    ax.plot(time_step, data[:, 2])
+    plt.legend(["potential", "kinetic", "total"], loc = "center right", prop={'size': legend_size})
     plt.title("Energy of the system over time")
-    plt.ylabel("E (Kj mol^-1)")
-    plt.xlabel("T (ns)")
+    plt.ylabel(r"$E \; \;(Kj \; mol^{-1}) $")
+    plt.xlabel(r"$T \; \;(ns)$")
+
+    ax.tick_params(axis='both', which='major', labelsize=axes_label_size)
+
     plt.show()
 
-    plt.plot(time_step, data[:, 3])
-    plt.plot(time_step, data[:, 4])
-    plt.plot(time_step, data[:, 5])
-    #plt.plot(time_step, data[:, 6])
-    plt.legend(["bonds", "angles", "dihedrals", "lj"], loc = (0.75,0.3))
-    plt.title("Distribution over potential energy")
-    plt.ylabel("E (Kj mol^-1)")
-    plt.xlabel("T (ns)")
-    plt.show()
+    # plt.plot(time_step, data[:, 3])
+    # plt.plot(time_step, data[:, 4])
+    # plt.plot(time_step, data[:, 5])
+    # #plt.plot(time_step, data[:, 6])
+    # plt.legend(["bonds", "angles", "dihedrals", "lj"], loc = (0.75,0.3))
+    # plt.title("Distribution over potential energy")
+    # plt.ylabel("E (Kj mol^-1)")
+    # plt.xlabel("T (ns)")
+    # plt.show()
 
-    plt.plot(time_step, data[:, -1])
+
+    fig, ax = plt.subplots(figsize = (11, 9))
+
+
+    ax.plot(time_step, data[:, -1])
     #plt.legend(["Temperature"])
     plt.title("Temperature distribution")
-    plt.ylabel("Temp (K)")
-    plt.ylim(270, 320)
-    plt.xlabel("T (ns)")
+    plt.ylabel(r"$Temp \;\; (K)$")
+    plt.ylim(296, 300)
+    plt.xlabel(r"$T \;\; (ns)$")
+
+    ax.tick_params(axis='both', which='major', labelsize=axes_label_size)
+
     plt.show()
+
+    # Instead of plotting the temperature, we compute mean and standard deviation:
+
+    temperature = data[:, -1]
+    mean_temperature = np.mean(temperature)
+    std_temperature = np.std(temperature)
+
+    print(f"Mean temperature: {mean_temperature}")
+    print(f"Std of temperature: {std_temperature}")
 
 def plot_integrator_information(file):
     data = np.genfromtxt(file, delimiter = ",")
@@ -57,7 +82,6 @@ def setup_matplotlib():
     # Remove the frame from the legend
     #color_list = ["#1AE0B1", "#740D0E", "#3F3B24"]
 
-    mpl.rcParams.update({'font.size': 22})
     sns.set(rc={
     'axes.axisbelow': False,
     'axes.edgecolor': 'lightgrey',
@@ -68,7 +92,9 @@ def setup_matplotlib():
     'axes.spines.top': False,
     #'axes.prop_cycle' : plt.cycler(color=color_list),
     'figure.facecolor': 'white',
-    'font.size' : 22,
+    "font.size": 22,
+    "axes.labelsize": 17,
+    "axes.titlesize": 26,
     'lines.solid_capstyle': 'round',
     'patch.edgecolor': 'w',
     'patch.force_edgecolor': True,
@@ -83,11 +109,50 @@ def setup_matplotlib():
     'ytick.right': False})
 
 
+def make_rdf_plot(xyz_file, top_file, output_file, first_molecule, second_molecule, dr, box_size):
+    
+    fig, ax = plt.subplots(figsize = (11, 9))
+
+
+    second_atom = "H"
+
+    (x,y) = radial_distribution_function(xyz_file, top_file, output_file, dr, box_size, 
+                           first_molecule, second_molecule, second_atom)
+
+    ax.plot(x,y, linewidth=2)
+
+    second_atom = "O"
+    (x,y) = radial_distribution_function(xyz_file, top_file, output_file, dr, box_size, 
+                           first_molecule, second_molecule, second_atom)
+
+    ax.plot(x,y, linewidth=2)
+    plt.title(f"{first_molecule}-{second_molecule} radial distribution function")
+    plt.xlabel(r"$r \;\; (\mathrm{\AA})$")
+    plt.legend(["OH", "OO"], prop={'size': legend_size})
+
+    ax.tick_params(axis='both', which='major', labelsize=axes_label_size)
+
+    plt.show()
+
+
 # If we plot somewhere else, importing this file sets the correct 
 # visual style
 setup_matplotlib()
 
 
 if __name__ == "__main__":
-    plot_debugging("output/test_r.csv")
+    plot_debugging("output/mix_3nm_slow.csv")
     #plot_integrator_information("output/result_phase_mix_3nm_2.csv")
+
+
+    xyz_file = "output/mix_3nm_slow.xyz"
+    top_file = "data/mix_3nm_2.itp"
+    output_file = "output/rdf/rdf_mix_water_water_h.csv"
+
+    first_molecule = "ethanol"
+    second_molecule = "ethanol"
+
+    box_size = 30
+    dr = 0.05
+
+    #make_rdf_plot(xyz_file, top_file, output_file, first_molecule, second_molecule, dr, box_size)
