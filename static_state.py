@@ -8,15 +8,15 @@ from helper import unit_vector, distance_PBC, dot_product, angle_between_jit, ad
 @jit(nopython=True, cache=True)
 def centre_of_mass(pos, m, molecules):
     """
-    Computes the centre of mass for each molecule
+        Computes the centre of mass for each molecule
 
-    params:
-        pos: array containing the positions
-        m: array containing the mass
-        molecules: list of lists specifying which molecule contains
-                    which atom
-    Output:
-        centre_of_mass: array containg the centres of mass
+        params:
+            pos: array containing the positions
+            m: array containing the mass
+            molecules: list of lists specifying which molecule contains
+                        which atom
+        Output:
+            centre_of_mass: array containg the centres of mass
     """
     centre_of_mass = np.zeros((molecules.shape[0], 3))
 
@@ -382,15 +382,15 @@ def temperature(Ekin,N):
 
 def centre_of_mass_s(pos, m, molecules):
     """
-    Computes the centre of mass for each molecule, non fixed-length version
-    is slower then the above version
-    Input:
-        pos: array containing the positions
-        m: array containing the mass
-        molecules: list of lists specifying which molecule contains
-                    which atom
-    Output:
-        centre_of_mass: array containg the centres of mass
+        Computes the centre of mass for each molecule, non fixed-length version
+        is slower then the above version
+        Input:
+            pos: array containing the positions
+            m: array containing the mass
+            molecules: list of lists specifying which molecule contains
+                        which atom
+        Output:
+            centre_of_mass: array containg the centres of mass
     """
     centre_of_mass = np.zeros((len(molecules), 3))
     for i, molecule in enumerate(molecules):

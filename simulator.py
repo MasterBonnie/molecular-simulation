@@ -1,5 +1,4 @@
 import numpy as np
-import cProfile
 import time
 
 from io_sim import read_topology, read_xyz, printProgressBar
@@ -151,7 +150,7 @@ def simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observa
             # without initialization and file reading.
             time_1 = time.time()
         while t < T:
-            if progress % 10 == 0:
+            if progress % 1000 == 0:
                 printProgressBar(progress, total_progress)
 
             # Select which integrator we use. In general, these follow the same pattern, update the positions and velocity,
@@ -267,25 +266,21 @@ def print_simulation_info(dt, T, r_cut, box_size, file_xyz, file_top, file_out, 
 # Testing of the functions
 if __name__ == "__main__":
 
-    # Water file
-    dt = 0.005 # 10^-13 s
-    T = 10 # 10^-13 s
+    dt = 0.0075 # 10^-13 s
+    T = 2000 # 10^-13 s
     r_cut = 7 # A
-    box_size = 50 # A
-    file_xyz = "data/ethanol.xyz"
-    file_top = "data/ethanol.itp"
-    file_out = "output/test.xyz"
-    file_observable = "output/test.csv"
-    T_desired = 0 #298.15   #kelvin     if zero we do not use a thermostat
+    box_size = 30 # A
+    file_xyz = "data/ethanol_3nm"
+    file_top = "data/ethanol_3nm.itp"
+    file_out = "output/result.xyz"
+    file_observable = "output/result.csv"
+    T_desired = 298.15   #kelvin     if zero we do not use a thermostat
     integrator = "vv"
-    write_output = False
-    write_output_threshold = 0
+    write_output = True
+    write_output_threshold = 0.75
     
     #NOTE: DO NOT FORGET TO CHANGE THIS 
-    fill_in_molecules = 0
+    fill_in_molecules = 9
 
-    time_1 = time.time()
-    #cProfile.run("simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, integrator, write_output, fill_in_molecules, write_output_threshold)")
     simulator(dt, T, r_cut, box_size, file_xyz, file_top, file_out, file_observable, T_desired, integrator, write_output, fill_in_molecules, write_output_threshold)
-    time_2 = time.time()
-    print(f"Total time in min: {(time_2 - time_1)/60}")
+

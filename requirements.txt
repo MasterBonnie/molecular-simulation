@@ -1,0 +1,6 @@
+### requirements for this project ###
+### instal using: pip install -r requirements.txt ###
+numba
+numpy
+matplotlib
+seaborn

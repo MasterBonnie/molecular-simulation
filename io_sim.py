@@ -55,7 +55,7 @@ def read_xyz(input):
                 atom_names.append(splittedLine[0])
 
             # Do stuff with the atoms here, for testing
-            # ------------------------------------
+            # -------------------------
 
     return pos, atom_names, atoms
 
@@ -191,10 +191,10 @@ def radial_distribution_function(xyz_file, top_file, output_file, dr, box_size, 
         total_rdf = total_rdf/(len(sample_points))
         
         # Save rdf calculation in csv file
-        #np.savetxt(output_file, total_rdf, delimiter=",")
+        np.savetxt(output_file, total_rdf, delimiter=",")
 
-        #plt.plot([distance[0] for distance in distances], total_rdf)
-        #plt.show()
+        plt.plot([distance[0] for distance in distances], total_rdf)
+        plt.show()
 
         return ([distance[0] for distance in distances], total_rdf)
 

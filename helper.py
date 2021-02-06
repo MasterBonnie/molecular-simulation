@@ -98,6 +98,7 @@ def angle_between_jit(arg_1, arg_2):
 
 @jit(nopython=True, cache=True)
 def dot_product(arg_1, arg_2):
+    """ row wise dot product between arg_1 and arg_2 """
     res = np.zeros((arg_1.shape[0]))
     _dot_product(arg_1, arg_2, res)
     return res
@@ -109,6 +110,7 @@ def _dot_product(arg_1, arg_2, res):
 
 @jit(nopython=True, cache=True)
 def sv_mult(arg_1, arg_2):
+    """ row wise scalar-vector multiplication """
     res = np.zeros(arg_2.shape)
     for i in range(arg_1.shape[0]):
         for j in range(3):
@@ -117,6 +119,7 @@ def sv_mult(arg_1, arg_2):
     
 @jit(nopython=True, cache=True)
 def r_norm(arg_1):
+    """ row wise norm of arg_1 """
     res = np.zeros((arg_1.shape[0]))
     for i in range(arg_1.shape[0]):
         res[i] = norm(arg_1[i][0], arg_1[i][1], arg_1[i][2])
@@ -124,6 +127,7 @@ def r_norm(arg_1):
 
 @jit(nopython=True, cache=True)
 def clip_jit(arg):
+    """ replacement of the numpy clip function """
     res = np.zeros((arg.shape[0]))
     _clip_jit(arg, res)
     return res
@@ -167,8 +171,8 @@ def cartesianprod(x,y):
 @jit(nopython=True, cache=True)
 def neighbor_list(molecule_to_atoms, centre_of_mass, r_cut, box_size, nr_atoms, atom_length):
     """
-    Returns which atoms are close, based on centres of mass that are withtin 
-    r_cut distance of eachother.
+        Returns which atoms are close, based on centres of mass that are withtin 
+        r_cut distance of eachother.
     """
 
     dis_matrix = np.zeros((centre_of_mass.shape[0], centre_of_mass.shape[0]), np.int8)

@@ -17,7 +17,7 @@ def plot_csv_phase(file):
 
 def plot_debugging(file):
     data = np.genfromtxt(file, delimiter = ",")
-    time_step = np.linspace(1.5, 2, num=data.shape[0])
+    time_step = np.linspace(3.5, 4, num=data.shape[0])
 
     fig, ax = plt.subplots(figsize = (11, 9))
 
@@ -33,15 +33,16 @@ def plot_debugging(file):
 
     plt.show()
 
-    # plt.plot(time_step, data[:, 3])
-    # plt.plot(time_step, data[:, 4])
-    # plt.plot(time_step, data[:, 5])
-    # #plt.plot(time_step, data[:, 6])
-    # plt.legend(["bonds", "angles", "dihedrals", "lj"], loc = (0.75,0.3))
-    # plt.title("Distribution over potential energy")
-    # plt.ylabel("E (Kj mol^-1)")
-    # plt.xlabel("T (ns)")
-    # plt.show()
+    fig, ax = plt.subplots(figsize = (11, 9))
+
+    ax.plot(time_step, data[:, 3])
+    ax.plot(time_step, data[:, 4])
+    ax.plot(time_step, data[:, 5])
+    plt.legend(["bonds", "angles", "dihedrals", "lj"], loc = (0.75,0.3), prop={'size': legend_size})
+    plt.title("Distribution over potential energy")
+    plt.ylabel(r"$E \; \;(Kj \; mol^{-1}) $")
+    plt.xlabel(r"$T \; \;(ns)$")
+    plt.show()
 
 
     fig, ax = plt.subplots(figsize = (11, 9))
@@ -141,12 +142,12 @@ setup_matplotlib()
 
 
 if __name__ == "__main__":
-    plot_debugging("output/mix_3nm_slow.csv")
+    plot_debugging("output/ethanol_3nm_redo_2.csv")
     #plot_integrator_information("output/result_phase_mix_3nm_2.csv")
 
 
-    xyz_file = "output/mix_3nm_slow.xyz"
-    top_file = "data/mix_3nm_2.itp"
+    xyz_file = "output/ethanol_3nm_redo_2.xyz"
+    top_file = "data/ethanol_3nm.itp"
     output_file = "output/rdf/rdf_mix_water_water_h.csv"
 
     first_molecule = "ethanol"
